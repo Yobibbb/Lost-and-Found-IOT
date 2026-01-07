@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "182349555558",
+    "project_id": "lostandfound-606de",
+    "storage_bucket": "lostandfound-606de.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:182349555558:android:66932ffea348858604caa7",
+        "android_client_info": {
+          "package_name": "com.example.lost_and_found_flutter"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAQ65H5Pp05NXF2BN-ZSyJ7U4rSPZD5VTw"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

@@ -1,0 +1,33 @@
+# Quick Firebase Setup Commands
+
+## Run these commands in order:
+
+# 1. Install Firebase CLI (if not already installed)
+npm install -g firebase-tools
+
+# 2. Login to Firebase
+firebase login
+
+# 3. Install FlutterFire CLI
+dart pub global activate flutterfire_cli
+
+# 4. Configure Firebase for this project
+cd "C:\Users\Glen Umadhay\OneDrive\Desktop\LostAndFoundFlutter"
+flutterfire configure
+
+# 5. After configuration, change demoMode to false in:
+# lib/config/demo_config.dart
+# Change: static const bool demoMode = false;
+
+# 6. Run the app
+flutter run -d chrome
+
+## Firebase Console Tasks:
+# Go to: https://console.firebase.google.com/
+
+# Enable these services:
+# 1. Authentication → Email/Password
+# 2. Firestore Database → Create database (Test mode)
+# 3. Storage → Get started (Test mode)
+
+## That's it! Your app will now use Firebase instead of mock data.
