@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../services/firebase_database_service.dart';
 import '../models/request_model.dart';
+import '../models/item_model.dart';
 import 'qr_scanner_screen.dart';
 
 class FinderStatusScreen extends StatelessWidget {
@@ -41,13 +42,19 @@ class FinderStatusScreen extends StatelessWidget {
           
           final request = snapshot.data!;
           
-          return SingleChildScrollView(
-            padding: const EdgeInsets.all(24),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                _StatusIcon(status: request.status),
-                const SizedBox(height: 24),
+          // Fetch item data to show box location
+          return FutureBuilder<ItemModel?>(
+            future: dbService.getItemById(request.itemId),
+            builder: (context, itemSnapshot) {
+              final item = itemSnapshot.data;
+              
+              return SingleChildScrollView(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    _StatusIcon(status: request.status),
+                    const SizedBox(height: 24),
                 
                 Text(
                   _getStatusTitle(request.status),
@@ -110,17 +117,78 @@ class FinderStatusScreen extends StatelessWidget {
                   ),
                 
                 if (request.status == 'approved') ...[
+                  // Show box location info
+                  if (item != null) ...[
+                    Card(
+                      color: const Color(0xFF6366F1).withOpacity(0.1),
+                      child: Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                const Icon(
+                                  Icons.inventory_2,
+                                  color: Color(0xFF6366F1),
+                                ),
+                                const SizedBox(width: 12),
+                                const Text(
+                                  'Item Location',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 16,
+                                    color: Color(0xFF6366F1),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 12),
+                            Row(
+                              children: [
+                                const Icon(Icons.location_on, size: 18),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        'Box: ${item.boxId}',
+                                        style: const TextStyle(
+                                          fontWeight: FontWeight.w600,
+                                          fontSize: 15,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        item.location,
+                                        style: TextStyle(
+                                          fontSize: 13,
+                                          color: Colors.grey[700],
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                  ],
                   Card(
-                    color: Colors.green[50],
+                    color: Colors.blue[50],
                     child: Padding(
                       padding: const EdgeInsets.all(16),
                       child: Row(
                         children: [
-                          Icon(Icons.check_circle, color: Colors.green[700]),
+                          Icon(Icons.info_outline, color: Colors.blue[700]),
                           const SizedBox(width: 12),
                           const Expanded(
                             child: Text(
-                              'Great news! Your request has been approved. You can now retrieve your item.',
+                              'Your item is ready to collect! Scan the QR code at the box to unlock and retrieve your item.',
                             ),
                           ),
                         ],
@@ -138,45 +206,164 @@ class FinderStatusScreen extends StatelessWidget {
                       );
                       
                       if (scannedData != null && context.mounted) {
-                        // Show the scanned QR code data
-                        showDialog(
-                          context: context,
-                          builder: (context) => AlertDialog(
-                            title: const Text('QR Code Scanned'),
-                            content: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const Text(
-                                  'Successfully scanned:',
-                                  style: TextStyle(fontWeight: FontWeight.bold),
-                                ),
-                                const SizedBox(height: 8),
-                                Text(
-                                  scannedData,
-                                  style: const TextStyle(
-                                    fontFamily: 'monospace',
-                                    fontSize: 12,
+                        // Validate scanned QR matches the box ID
+                        if (item != null && scannedData == item.boxId) {
+                          // Show success dialog with "I Got It" button
+                          showDialog(
+                            context: context,
+                            barrierDismissible: false,
+                            builder: (dialogContext) => AlertDialog(
+                              title: Row(
+                                children: [
+                                  Icon(Icons.check_circle, color: Colors.green[700]),
+                                  const SizedBox(width: 8),
+                                  const Text('Box Unlocked!'),
+                                ],
+                              ),
+                              content: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Text(
+                                    '✅ Box successfully unlocked!',
+                                    style: TextStyle(
+                                      color: Colors.green,
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 16,
+                                    ),
                                   ),
-                                ),
-                                const SizedBox(height: 16),
-                                const Text(
-                                  '✅ You can now retrieve your item!',
-                                  style: TextStyle(
-                                    color: Colors.green,
-                                    fontWeight: FontWeight.bold,
+                                  const SizedBox(height: 16),
+                                  Text(
+                                    'Box: ${item.boxId}',
+                                    style: const TextStyle(fontWeight: FontWeight.bold),
+                                  ),
+                                  const SizedBox(height: 8),
+                                  const Text(
+                                    'Please retrieve your item from the box.',
+                                    style: TextStyle(fontSize: 14),
+                                  ),
+                                  const SizedBox(height: 16),
+                                  Container(
+                                    padding: const EdgeInsets.all(12),
+                                    decoration: BoxDecoration(
+                                      color: Colors.blue[50],
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    child: const Row(
+                                      children: [
+                                        Icon(Icons.info_outline, color: Colors.blue, size: 20),
+                                        SizedBox(width: 8),
+                                        Expanded(
+                                          child: Text(
+                                            'Click "I Got It" after you retrieve your item.',
+                                            style: TextStyle(fontSize: 12),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              actions: [
+                                ElevatedButton.icon(
+                                  onPressed: () async {
+                                    // Update item status to 'claimed'
+                                    final updateResult = await dbService.updateItemStatus(
+                                      item.id,
+                                      'claimed',
+                                    );
+                                    
+                                    if (!context.mounted) return;
+                                    
+                                    Navigator.of(dialogContext).pop(); // Close dialog
+                                    
+                                    if (updateResult['success']) {
+                                      // Show success message
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        const SnackBar(
+                                          content: Text('✅ Item successfully claimed!'),
+                                          backgroundColor: Colors.green,
+                                        ),
+                                      );
+                                      
+                                      // Navigate back to home
+                                      Navigator.of(context).popUntil((route) => route.isFirst);
+                                    } else {
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        SnackBar(
+                                          content: Text(updateResult['error'] ?? 'Failed to claim item'),
+                                          backgroundColor: Colors.red,
+                                        ),
+                                      );
+                                    }
+                                  },
+                                  icon: const Icon(Icons.check_circle),
+                                  label: const Text('I Got It!'),
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: Colors.green,
+                                    foregroundColor: Colors.white,
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 24,
+                                      vertical: 12,
+                                    ),
                                   ),
                                 ),
                               ],
                             ),
-                            actions: [
-                              TextButton(
-                                onPressed: () => Navigator.of(context).pop(),
-                                child: const Text('OK'),
+                          );
+                        } else {
+                          // Wrong box scanned
+                          showDialog(
+                            context: context,
+                            builder: (context) => AlertDialog(
+                              title: Row(
+                                children: [
+                                  Icon(Icons.error_outline, color: Colors.red[700]),
+                                  const SizedBox(width: 8),
+                                  const Text('Wrong Box'),
+                                ],
                               ),
-                            ],
-                          ),
-                        );
+                              content: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Text(
+                                    '❌ This is not the correct box.',
+                                    style: TextStyle(
+                                      color: Colors.red,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 16),
+                                  if (item != null) ...[
+                                    const Text(
+                                      'Expected Box:',
+                                      style: TextStyle(fontWeight: FontWeight.bold),
+                                    ),
+                                    Text(
+                                      '${item.boxId} - ${item.location}',
+                                      style: const TextStyle(fontSize: 14),
+                                    ),
+                                  ],
+                                  const SizedBox(height: 8),
+                                  Text(
+                                    'Scanned: $scannedData',
+                                    style: const TextStyle(
+                                      fontSize: 12,
+                                      fontFamily: 'monospace',
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              actions: [
+                                TextButton(
+                                  onPressed: () => Navigator.of(context).pop(),
+                                  child: const Text('Try Again'),
+                                ),
+                              ],
+                            ),
+                          );
+                        }
                       }
                     },
                     icon: const Icon(Icons.qr_code_scanner),
@@ -222,6 +409,8 @@ class FinderStatusScreen extends StatelessWidget {
               ],
             ),
           );
+            },
+          );
         },
       ),
     );
@@ -230,7 +419,7 @@ class FinderStatusScreen extends StatelessWidget {
   String _getStatusTitle(String status) {
     switch (status) {
       case 'approved':
-        return 'Request Approved!';
+        return 'Ready to Collect!';
       case 'rejected':
         return 'Request Rejected';
       default:
@@ -241,7 +430,7 @@ class FinderStatusScreen extends StatelessWidget {
   String _getStatusMessage(String status) {
     switch (status) {
       case 'approved':
-        return 'The founder has approved your request';
+        return 'Your item is ready to collect';
       case 'rejected':
         return 'The founder has rejected your request';
       default:
@@ -262,8 +451,8 @@ class _StatusIcon extends StatelessWidget {
     
     switch (status) {
       case 'approved':
-        icon = Icons.check_circle;
-        color = Colors.green;
+        icon = Icons.inventory_2;
+        color = const Color(0xFF3B82F6); // Blue color
         break;
       case 'rejected':
         icon = Icons.cancel;

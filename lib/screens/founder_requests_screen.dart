@@ -247,8 +247,8 @@ class _StatusChip extends StatelessWidget {
     
     switch (status) {
       case 'approved':
-        color = Colors.green;
-        label = 'Approved';
+        color = const Color(0xFF3B82F6); // Blue color
+        label = 'To Collect';
         break;
       case 'rejected':
         color = Colors.red;

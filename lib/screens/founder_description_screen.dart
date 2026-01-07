@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../services/firebase_database_service.dart';
-import 'founder_requests_screen.dart';
+import '../services/box_service.dart';
+import '../models/box_model.dart';
+import 'founder_storage_screen.dart';
 
 class FounderDescriptionScreen extends StatefulWidget {
   const FounderDescriptionScreen({super.key});
@@ -15,7 +17,27 @@ class _FounderDescriptionScreenState extends State<FounderDescriptionScreen> {
   final _titleController = TextEditingController();
   final _descriptionController = TextEditingController();
   final _deviceIdController = TextEditingController();
+  final BoxService _boxService = BoxService();
+  
   bool _isLoading = false;
+  bool _isLoadingBoxes = true;
+  List<BoxModel> _availableBoxes = [];
+  BoxModel? _selectedBox;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadAvailableBoxes();
+  }
+
+  Future<void> _loadAvailableBoxes() async {
+    setState(() => _isLoadingBoxes = true);
+    final boxes = await _boxService.getAvailableBoxes();
+    setState(() {
+      _availableBoxes = boxes;
+      _isLoadingBoxes = false;
+    });
+  }
 
   @override
   void dispose() {
@@ -28,13 +50,22 @@ class _FounderDescriptionScreenState extends State<FounderDescriptionScreen> {
   Future<void> _submitItem() async {
     if (!_formKey.currentState!.validate()) return;
 
+    if (_selectedBox == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please select a box')),
+      );
+      return;
+    }
+
     setState(() => _isLoading = true);
 
     final dbService = Provider.of<FirebaseDatabaseService>(context, listen: false);
     final result = await dbService.createItem(
       title: _titleController.text.trim(),
       description: _descriptionController.text.trim(),
-      deviceId: _deviceIdController.text.trim(),
+      boxId: _selectedBox!.id,
+      location: _selectedBox!.location,
+      deviceId: _deviceIdController.text.trim().isEmpty ? null : _deviceIdController.text.trim(),
     );
 
     setState(() => _isLoading = false);
@@ -44,7 +75,11 @@ class _FounderDescriptionScreenState extends State<FounderDescriptionScreen> {
     if (result['success']) {
       Navigator.of(context).pushReplacement(
         MaterialPageRoute(
-          builder: (_) => FounderRequestsScreen(itemId: result['itemId']),
+          builder: (_) => FounderStorageScreen(
+            itemId: result['itemId'],
+            boxId: _selectedBox!.id,
+            boxLocation: _selectedBox!.location,
+          ),
         ),
       );
     } else {
@@ -154,6 +189,63 @@ class _FounderDescriptionScreenState extends State<FounderDescriptionScreen> {
             ),
             const SizedBox(height: 20),
             
+            // Box Selection Dropdown
+            if (_isLoadingBoxes)
+              const Card(
+                child: Padding(
+                  padding: EdgeInsets.all(16),
+                  child: Row(
+                    children: [
+                      SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      ),
+                      SizedBox(width: 12),
+                      Text('Loading available boxes...'),
+                    ],
+                  ),
+                ),
+              )
+            else if (_availableBoxes.isEmpty)
+              Card(
+                color: Colors.orange[50],
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Row(
+                    children: [
+                      Icon(Icons.warning_amber_rounded, color: Colors.orange[700]),
+                      const SizedBox(width: 12),
+                      const Expanded(
+                        child: Text('No boxes available at the moment. Please try again later.'),
+                      ),
+                    ],
+                  ),
+                ),
+              )
+            else
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Select Storage Box *',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  ...(_availableBoxes.map((box) => _BoxSelectionCard(
+                    box: box,
+                    isSelected: _selectedBox?.id == box.id,
+                    onTap: () {
+                      setState(() => _selectedBox = box);
+                    },
+                  ))),
+                ],
+              ),
+            const SizedBox(height: 20),
+            
             // Device ID Field
             TextFormField(
               controller: _deviceIdController,
@@ -186,6 +278,122 @@ class _FounderDescriptionScreenState extends State<FounderDescriptionScreen> {
                 _isLoading ? 'Submitting...' : 'Submit Item',
                 style: const TextStyle(
                   fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// Box Selection Card Widget
+class _BoxSelectionCard extends StatelessWidget {
+  final BoxModel box;
+  final bool isSelected;
+  final VoidCallback onTap;
+
+  const _BoxSelectionCard({
+    required this.box,
+    required this.isSelected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 12),
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: isSelected ? const Color(0xFF6366F1).withOpacity(0.1) : Colors.white,
+          border: Border.all(
+            color: isSelected ? const Color(0xFF6366F1) : Colors.grey.shade300,
+            width: isSelected ? 2 : 1,
+          ),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Row(
+          children: [
+            // Selection Indicator
+            Container(
+              width: 24,
+              height: 24,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                border: Border.all(
+                  color: isSelected ? const Color(0xFF6366F1) : Colors.grey.shade400,
+                  width: 2,
+                ),
+                color: isSelected ? const Color(0xFF6366F1) : Colors.transparent,
+              ),
+              child: isSelected
+                  ? const Icon(Icons.check, size: 16, color: Colors.white)
+                  : null,
+            ),
+            const SizedBox(width: 12),
+            
+            // Box Icon
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: const Color(0xFF6366F1).withOpacity(0.1),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Icon(
+                Icons.inventory_2_outlined,
+                color: Color(0xFF6366F1),
+              ),
+            ),
+            const SizedBox(width: 12),
+            
+            // Box Details
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    box.name,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Row(
+                    children: [
+                      Icon(Icons.location_on, size: 14, color: Colors.grey[600]),
+                      const SizedBox(width: 4),
+                      Expanded(
+                        child: Text(
+                          box.location,
+                          style: TextStyle(
+                            color: Colors.grey[600],
+                            fontSize: 13,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            
+            // Status Badge
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: Colors.green[50],
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Text(
+                'Available',
+                style: TextStyle(
+                  color: Colors.green[700],
+                  fontSize: 12,
                   fontWeight: FontWeight.w600,
                 ),
               ),

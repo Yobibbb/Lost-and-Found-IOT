@@ -5,6 +5,7 @@ import '../models/notification_model.dart';
 import '../services/firebase_database_service.dart';
 import '../services/auth_service.dart';
 import 'finder_status_screen.dart';
+import 'founder_requests_screen.dart';
 import 'chat_screen.dart';
 
 class NotificationsScreen extends StatelessWidget {
@@ -136,9 +137,24 @@ class _NotificationTile extends StatelessWidget {
     if (!context.mounted) return;
     
     if (notification.type == 'request_received' && notification.relatedId != null) {
-      // Get the request to find the itemId
-      // For now, we'll navigate to a generic screen
-      // In a real app, you'd fetch the request and get the itemId
+      // Navigate to founder requests screen for the specific item
+      // relatedId contains the requestId
+      try {
+        final request = await dbService.getRequest(notification.relatedId!);
+        if (context.mounted && request != null) {
+          Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (_) => FounderRequestsScreen(itemId: request.itemId),
+            ),
+          );
+        }
+      } catch (e) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Could not open request')),
+          );
+        }
+      }
     } else if (notification.type == 'request_approved' || notification.type == 'request_rejected') {
       if (notification.relatedId != null) {
         Navigator.of(context).push(

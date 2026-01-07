@@ -148,6 +148,39 @@ class _ItemCardState extends State<_ItemCard> {
                   'Found on: ${dateFormat.format(widget.item.timestamp)}',
                   style: TextStyle(fontSize: 12, color: Colors.grey[600]),
                 ),
+                const SizedBox(height: 6),
+                // Box location info
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF6366F1).withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(color: const Color(0xFF6366F1).withOpacity(0.3)),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(
+                        Icons.inventory_2_outlined,
+                        size: 14,
+                        color: Color(0xFF6366F1),
+                      ),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          'Stored in ${widget.item.boxId} - ${widget.item.location}',
+                          style: const TextStyle(
+                            fontSize: 11,
+                            color: Color(0xFF6366F1),
+                            fontWeight: FontWeight.w600,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
               ],
             ),
             trailing: IconButton(

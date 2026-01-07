@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import 'config/demo_config.dart';
 import 'services/auth_service.dart';
 import 'services/firebase_database_service.dart';
+import 'services/box_service.dart';
 import 'screens/auth_screen.dart';
 import 'screens/role_selection_screen.dart';
 
@@ -13,6 +14,13 @@ void main() async {
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
+  
+  // Initialize boxes in Firebase (only runs once if boxes don't exist)
+  if (!DemoConfig.demoMode) {
+    final boxService = BoxService();
+    await boxService.initializeBoxes();
+  }
+  
   runApp(const MyApp());
 }
 

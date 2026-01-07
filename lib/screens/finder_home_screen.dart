@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../models/request_model.dart';
+import '../models/notification_model.dart';
 import '../services/firebase_database_service.dart';
 import '../services/auth_service.dart';
 import 'finder_description_screen.dart';
@@ -23,7 +24,6 @@ class _FinderHomeScreenState extends State<FinderHomeScreen> {
   Widget build(BuildContext context) {
     final authService = Provider.of<AuthService>(context, listen: false);
     final dbService = Provider.of<FirebaseDatabaseService>(context, listen: false);
-    final unreadCount = dbService.getUnreadNotificationCount(authService.currentUser!.uid);
     
     return Scaffold(
       backgroundColor: Colors.grey.shade50,
@@ -43,43 +43,51 @@ class _FinderHomeScreenState extends State<FinderHomeScreen> {
               );
             },
           ),
-          Stack(
-            children: [
-              IconButton(
-                icon: const Icon(Icons.notifications_outlined),
-                tooltip: 'Notifications',
-                onPressed: () {
-                  Navigator.of(context).push(
-                    MaterialPageRoute(builder: (_) => const NotificationsScreen()),
-                  );
-                },
-              ),
-              if (unreadCount > 0)
-                Positioned(
-                  right: 8,
-                  top: 8,
-                  child: Container(
-                    padding: const EdgeInsets.all(4),
-                    decoration: const BoxDecoration(
-                      color: Color(0xFFEF4444),
-                      shape: BoxShape.circle,
-                    ),
-                    constraints: const BoxConstraints(
-                      minWidth: 16,
-                      minHeight: 16,
-                    ),
-                    child: Text(
-                      unreadCount > 9 ? '9+' : '$unreadCount',
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 10,
-                        fontWeight: FontWeight.bold,
-                      ),
-                      textAlign: TextAlign.center,
-                    ),
+          StreamBuilder<List<NotificationModel>>(
+            stream: dbService.streamUserNotifications(authService.currentUser!.uid),
+            builder: (context, snapshot) {
+              final notifications = snapshot.data ?? [];
+              final unreadNotifCount = notifications.where((n) => !n.isRead).length;
+              
+              return Stack(
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.notifications_outlined),
+                    tooltip: 'Notifications',
+                    onPressed: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(builder: (_) => const NotificationsScreen()),
+                      );
+                    },
                   ),
-                ),
-            ],
+                  if (unreadNotifCount > 0)
+                    Positioned(
+                      right: 8,
+                      top: 8,
+                      child: Container(
+                        padding: const EdgeInsets.all(4),
+                        decoration: const BoxDecoration(
+                          color: Color(0xFFEF4444),
+                          shape: BoxShape.circle,
+                        ),
+                        constraints: const BoxConstraints(
+                          minWidth: 16,
+                          minHeight: 16,
+                        ),
+                        child: Text(
+                          unreadNotifCount > 9 ? '9+' : '$unreadNotifCount',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                      ),
+                    ),
+                ],
+              );
+            },
           ),
           IconButton(
             icon: const Icon(Icons.logout_rounded),
@@ -222,23 +230,13 @@ class _RequestCard extends StatelessWidget {
             children: [
               Row(
                 children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
-                          'Request',
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 18,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          'Item ID: ${request.itemId}',
-                          style: TextStyle(fontSize: 12, color: Colors.grey[600]),
-                        ),
-                      ],
+                  const Expanded(
+                    child: Text(
+                      'Request',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 18,
+                      ),
                     ),
                   ),
                   _StatusBadge(status: request.status),
@@ -272,14 +270,25 @@ class _RequestCard extends StatelessWidget {
                 ],
               ),
               const SizedBox(height: 8),
-              const Row(
+              Row(
                 children: [
-                  Icon(Icons.touch_app, size: 16, color: Colors.blue),
-                  SizedBox(width: 4),
-                  Text(
+                  const Icon(Icons.touch_app, size: 16, color: Colors.blue),
+                  const SizedBox(width: 4),
+                  const Text(
                     'Tap to view details',
                     style: TextStyle(color: Colors.blue, fontSize: 12),
                   ),
+                  const Spacer(),
+                  if (request.status == 'pending')
+                    TextButton.icon(
+                      onPressed: () => _showCancelDialog(context, request),
+                      icon: const Icon(Icons.cancel, size: 16),
+                      label: const Text('Cancel'),
+                      style: TextButton.styleFrom(
+                        foregroundColor: Colors.red,
+                        padding: const EdgeInsets.symmetric(horizontal: 8),
+                      ),
+                    ),
                 ],
               ),
             ],
@@ -287,6 +296,57 @@ class _RequestCard extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  Future<void> _showCancelDialog(BuildContext context, RequestModel request) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Cancel Request?'),
+        content: const Text(
+          'Are you sure you want to cancel this request? This action cannot be undone.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('No'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('Yes, Cancel'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true && context.mounted) {
+      final dbService = Provider.of<FirebaseDatabaseService>(context, listen: false);
+      final result = await dbService.cancelRequest(request.id);
+
+      if (context.mounted) {
+        if (result['success']) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Request canceled successfully'),
+              backgroundColor: Colors.green,
+            ),
+          );
+          // Navigate back and then back to refresh
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(builder: (_) => const FinderHomeScreen()),
+          );
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(result['error'] ?? 'Failed to cancel request'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      }
+    }
   }
 }
 

@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../models/item_model.dart';
+import '../models/notification_model.dart';
 import '../services/firebase_database_service.dart';
 import '../services/auth_service.dart';
 import 'founder_description_screen.dart';
 import 'founder_requests_screen.dart';
+import 'founder_storage_screen.dart';
 import 'notifications_screen.dart';
 import 'chat_list_screen.dart';
 import 'package:intl/intl.dart';
@@ -23,7 +25,6 @@ class _FounderHomeScreenState extends State<FounderHomeScreen> {
   Widget build(BuildContext context) {
     final authService = Provider.of<AuthService>(context, listen: false);
     final dbService = Provider.of<FirebaseDatabaseService>(context, listen: false);
-    final unreadCount = dbService.getUnreadNotificationCount(authService.currentUser!.uid);
     
     return Scaffold(
       backgroundColor: Colors.grey.shade50,
@@ -43,43 +44,51 @@ class _FounderHomeScreenState extends State<FounderHomeScreen> {
               );
             },
           ),
-          Stack(
-            children: [
-              IconButton(
-                icon: const Icon(Icons.notifications_outlined),
-                tooltip: 'Notifications',
-                onPressed: () {
-                  Navigator.of(context).push(
-                    MaterialPageRoute(builder: (_) => const NotificationsScreen()),
-                  );
-                },
-              ),
-              if (unreadCount > 0)
-                Positioned(
-                  right: 8,
-                  top: 8,
-                  child: Container(
-                    padding: const EdgeInsets.all(4),
-                    decoration: const BoxDecoration(
-                      color: Color(0xFFEF4444),
-                      shape: BoxShape.circle,
-                    ),
-                    constraints: const BoxConstraints(
-                      minWidth: 16,
-                      minHeight: 16,
-                    ),
-                    child: Text(
-                      unreadCount > 9 ? '9+' : '$unreadCount',
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 10,
-                        fontWeight: FontWeight.bold,
-                      ),
-                      textAlign: TextAlign.center,
-                    ),
+          StreamBuilder<List<NotificationModel>>(
+            stream: dbService.streamUserNotifications(authService.currentUser!.uid),
+            builder: (context, snapshot) {
+              final notifications = snapshot.data ?? [];
+              final unreadNotifCount = notifications.where((n) => !n.isRead).length;
+              
+              return Stack(
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.notifications_outlined),
+                    tooltip: 'Notifications',
+                    onPressed: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(builder: (_) => const NotificationsScreen()),
+                      );
+                    },
                   ),
-                ),
-            ],
+                  if (unreadNotifCount > 0)
+                    Positioned(
+                      right: 8,
+                      top: 8,
+                      child: Container(
+                        padding: const EdgeInsets.all(4),
+                        decoration: const BoxDecoration(
+                          color: Color(0xFFEF4444),
+                          shape: BoxShape.circle,
+                        ),
+                        constraints: const BoxConstraints(
+                          minWidth: 16,
+                          minHeight: 16,
+                        ),
+                        child: Text(
+                          unreadNotifCount > 9 ? '9+' : '$unreadNotifCount',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                      ),
+                    ),
+                ],
+              );
+            },
           ),
           IconButton(
             icon: const Icon(Icons.logout_rounded),
@@ -222,11 +231,25 @@ class _ItemCard extends StatelessWidget {
       ),
       child: InkWell(
         onTap: () {
-          Navigator.of(context).push(
-            MaterialPageRoute(
-              builder: (_) => FounderRequestsScreen(itemId: item.id),
-            ),
-          );
+          // If item is still pending storage, go back to storage screen
+          if (item.status == 'pending_storage') {
+            Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (_) => FounderStorageScreen(
+                  itemId: item.id,
+                  boxId: item.boxId,
+                  boxLocation: item.location,
+                ),
+              ),
+            );
+          } else {
+            // Otherwise go to requests screen
+            Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (_) => FounderRequestsScreen(itemId: item.id),
+              ),
+            );
+          }
         },
         borderRadius: BorderRadius.circular(16),
         child: Padding(
@@ -294,6 +317,65 @@ class _ItemCard extends StatelessWidget {
                   height: 1.4,
                 ),
               ),
+              const SizedBox(height: 12),
+              
+              // Box Location Info
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF6366F1).withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: const Color(0xFF6366F1).withOpacity(0.3)),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(
+                      Icons.inventory_2_outlined,
+                      size: 16,
+                      color: Color(0xFF6366F1),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Box: ${item.boxId}',
+                            style: const TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                              color: Color(0xFF6366F1),
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Row(
+                            children: [
+                              Icon(
+                                Icons.location_on,
+                                size: 12,
+                                color: Colors.grey[600],
+                              ),
+                              const SizedBox(width: 4),
+                              Expanded(
+                                child: Text(
+                                  item.location,
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    color: Colors.grey[700],
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              
               if (item.deviceId != null) ...[
                 const SizedBox(height: 12),
                 Container(
@@ -326,19 +408,40 @@ class _ItemCard extends StatelessWidget {
               const SizedBox(height: 12),
               Row(
                 children: [
-                  Icon(Icons.touch_app_rounded, 
+                  Icon(
+                    item.status == 'pending_storage' 
+                        ? Icons.qr_code_scanner
+                        : Icons.touch_app_rounded, 
                     size: 16, 
-                    color: const Color(0xFF6366F1)
+                    color: item.status == 'pending_storage'
+                        ? const Color(0xFFEF4444)
+                        : const Color(0xFF6366F1)
                   ),
                   const SizedBox(width: 6),
-                  const Text(
-                    'Tap to view requests',
-                    style: TextStyle(
-                      color: Color(0xFF6366F1), 
-                      fontSize: 13,
-                      fontWeight: FontWeight.w500,
+                  Expanded(
+                    child: Text(
+                      item.status == 'pending_storage'
+                          ? 'Tap to scan QR & store item'
+                          : 'Tap to view requests',
+                      style: TextStyle(
+                        color: item.status == 'pending_storage'
+                            ? const Color(0xFFEF4444)
+                            : const Color(0xFF6366F1), 
+                        fontSize: 13,
+                        fontWeight: FontWeight.w500,
+                      ),
                     ),
                   ),
+                  if (item.status == 'pending_storage')
+                    TextButton.icon(
+                      onPressed: () => _showDeleteDialog(context, item),
+                      icon: const Icon(Icons.delete, size: 16),
+                      label: const Text('Delete'),
+                      style: TextButton.styleFrom(
+                        foregroundColor: Colors.red,
+                        padding: const EdgeInsets.symmetric(horizontal: 8),
+                      ),
+                    ),
                 ],
               ),
             ],
@@ -346,6 +449,57 @@ class _ItemCard extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  Future<void> _showDeleteDialog(BuildContext context, ItemModel item) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete Item?'),
+        content: Text(
+          'Are you sure you want to delete "${item.title}"?\n\nThis will release ${item.boxId} and remove the item permanently.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true && context.mounted) {
+      final dbService = Provider.of<FirebaseDatabaseService>(context, listen: false);
+      final result = await dbService.deleteItem(item.id);
+
+      if (context.mounted) {
+        if (result['success']) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('${item.title} deleted successfully'),
+              backgroundColor: Colors.green,
+            ),
+          );
+          // Refresh by navigating to the same screen
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(builder: (_) => const FounderHomeScreen()),
+          );
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(result['error'] ?? 'Failed to delete item'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      }
+    }
   }
 }
 
@@ -361,6 +515,16 @@ class _StatusBadge extends StatelessWidget {
     String label;
     
     switch (status) {
+      case 'pending_storage':
+        color = const Color(0xFFEF4444);
+        icon = Icons.upload_rounded;
+        label = 'Pending Storage';
+        break;
+      case 'to_collect':
+        color = const Color(0xFF3B82F6); // Blue color
+        icon = Icons.schedule_rounded;
+        label = 'To Collect';
+        break;
       case 'claimed':
         color = const Color(0xFF10B981);
         icon = Icons.check_circle_rounded;

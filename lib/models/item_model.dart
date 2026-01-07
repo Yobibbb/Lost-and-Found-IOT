@@ -7,9 +7,15 @@ class ItemModel {
   final String founderId;
   final String founderName;
   final String founderEmail;
+  final String boxId; // Required: ID of the IoT box (e.g., "BOX_A1")
+  final String location; // Required: Physical location of the box
   final String? deviceId;
-  final String? location;
-  final String status; // waiting, matched, retrieved
+  final String status; // pending_storage, waiting, to_collect, claimed
+  // Status flow:
+  // 1. pending_storage - Item submitted, waiting for founder to scan QR and store in box
+  // 2. waiting - Item stored in box, waiting for finder requests
+  // 3. to_collect - Request approved, waiting for finder to retrieve item
+  // 4. claimed - Finder retrieved the item
   final DateTime timestamp;
   final DateTime createdAt;
 
@@ -20,8 +26,9 @@ class ItemModel {
     required this.founderId,
     required this.founderName,
     required this.founderEmail,
+    required this.boxId,
+    required this.location,
     this.deviceId,
-    this.location,
     required this.status,
     required this.timestamp,
     required this.createdAt,
@@ -35,9 +42,10 @@ class ItemModel {
       founderId: map['founderId'] ?? '',
       founderName: map['founderName'] ?? '',
       founderEmail: map['founderEmail'] ?? '',
+      boxId: map['boxId'] ?? '',
+      location: map['location'] ?? '',
       deviceId: map['deviceId'],
-      location: map['location'],
-      status: map['status'] ?? 'waiting',
+      status: map['status'] ?? 'pending_storage',
       timestamp: _parseDateTime(map['timestamp']),
       createdAt: _parseDateTime(map['createdAt']),
     );
@@ -57,8 +65,9 @@ class ItemModel {
       'founderId': founderId,
       'founderName': founderName,
       'founderEmail': founderEmail,
-      'deviceId': deviceId,
+      'boxId': boxId,
       'location': location,
+      'deviceId': deviceId,
       'status': status,
       'timestamp': timestamp.toIso8601String(),
       'createdAt': createdAt.toIso8601String(),

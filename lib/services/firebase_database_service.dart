@@ -8,10 +8,12 @@ import '../models/request_model.dart';
 import '../models/notification_model.dart';
 import '../models/chat_model.dart';
 import 'auth_service.dart';
+import 'box_service.dart';
 
 class FirebaseDatabaseService {
   final AuthService _authService;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final BoxService _boxService = BoxService();
   
   // Demo mode state (for backward compatibility)
   final List<ItemModel> _demoItems = List.from(MockData.mockItems);
@@ -29,28 +31,35 @@ class FirebaseDatabaseService {
   Future<Map<String, dynamic>> createItem({
     required String title,
     required String description,
+    required String boxId,
+    required String location,
     String? deviceId,
-    String? location,
   }) async {
     if (DemoConfig.demoMode) {
       // Demo mode logic
       await MockData.mockDelay();
       final user = _authService.currentUser!;
+      final itemId = const Uuid().v4();
       final newItem = ItemModel(
-        id: const Uuid().v4(),
+        id: itemId,
         title: title,
         description: description,
         founderId: user.uid,
         founderName: user.displayName ?? 'Demo User',
         founderEmail: user.email ?? '',
-        deviceId: deviceId,
+        boxId: boxId,
         location: location,
-        status: 'waiting',
+        deviceId: deviceId,
+        status: 'pending_storage',
         timestamp: DateTime.now(),
         createdAt: DateTime.now(),
       );
       
       _demoItems.add(newItem);
+      
+      // Mark box as reserved/occupied immediately
+      await _boxService.occupyBox(boxId, itemId);
+      
       return {'success': true, 'itemId': newItem.id};
     }
     
@@ -65,14 +74,70 @@ class FirebaseDatabaseService {
         'founderId': user.uid,
         'founderName': user.displayName ?? 'User',
         'founderEmail': user.email ?? '',
-        'deviceId': deviceId,
+        'boxId': boxId,
         'location': location,
-        'status': 'waiting',
+        'deviceId': deviceId,
+        'status': 'pending_storage',
         'timestamp': FieldValue.serverTimestamp(),
         'createdAt': FieldValue.serverTimestamp(),
       });
       
+      // Mark box as reserved/occupied immediately
+      await _boxService.occupyBox(boxId, itemRef.id);
+      
       return {'success': true, 'itemId': itemRef.id};
+    } catch (e) {
+      return {'success': false, 'error': e.toString()};
+    }
+  }
+
+  // Update item status (and manage box availability)
+  Future<Map<String, dynamic>> updateItemStatus(String itemId, String newStatus) async {
+    if (DemoConfig.demoMode) {
+      await MockData.mockDelay();
+      final index = _demoItems.indexWhere((item) => item.id == itemId);
+      if (index != -1) {
+        final item = _demoItems[index];
+        
+        // Update box availability based on status
+        if (newStatus == 'waiting') {
+          // Item stored in box - mark box as occupied
+          await _boxService.occupyBox(item.boxId, itemId);
+        } else if (newStatus == 'claimed') {
+          // Item claimed/retrieved - release the box
+          await _boxService.releaseBox(item.boxId);
+        }
+        
+        return {'success': true};
+      }
+      return {'success': false, 'error': 'Item not found'};
+    }
+
+    try {
+      // Get the item to know which box it's in
+      final itemDoc = await _firestore.collection('items').doc(itemId).get();
+      if (!itemDoc.exists) {
+        return {'success': false, 'error': 'Item not found'};
+      }
+      
+      final item = ItemModel.fromMap(itemDoc.data()!, itemId);
+      
+      // Update item status
+      await _firestore.collection('items').doc(itemId).update({
+        'status': newStatus,
+        'lastUpdated': FieldValue.serverTimestamp(),
+      });
+      
+      // Update box availability based on status
+      if (newStatus == 'waiting') {
+        // Item stored in box - mark box as occupied
+        await _boxService.occupyBox(item.boxId, itemId);
+      } else if (newStatus == 'claimed') {
+        // Item claimed/retrieved - release the box
+        await _boxService.releaseBox(item.boxId);
+      }
+      
+      return {'success': true};
     } catch (e) {
       return {'success': false, 'error': e.toString()};
     }
@@ -82,32 +147,61 @@ class FirebaseDatabaseService {
   Future<List<ItemModel>> searchItems(String searchText) async {
     if (DemoConfig.demoMode) {
       await MockData.mockDelay();
+      final currentUserId = _authService.currentUser?.uid;
       final lowerSearch = searchText.toLowerCase();
       return _demoItems.where((item) {
-        return item.status == 'waiting' &&
+        // Exclude items posted by current user
+        return item.founderId != currentUserId &&
+            (item.status == 'waiting' || item.status == 'pending_storage') &&
             (item.title.toLowerCase().contains(lowerSearch) ||
              item.description.toLowerCase().contains(lowerSearch));
       }).toList();
     }
     
-    // Firebase mode
+    // Firebase mode - search for items that are waiting OR pending_storage (for testing)
     try {
+      final currentUserId = _authService.currentUser?.uid;
       final snapshot = await _firestore
           .collection('items')
-          .where('status', isEqualTo: 'waiting')
+          .where('status', whereIn: ['waiting', 'pending_storage'])
           .get();
       
       final lowerSearch = searchText.toLowerCase();
       final items = snapshot.docs
           .map((doc) => ItemModel.fromMap(doc.data(), doc.id))
           .where((item) =>
-              item.title.toLowerCase().contains(lowerSearch) ||
-              item.description.toLowerCase().contains(lowerSearch))
+              // Exclude items posted by current user
+              item.founderId != currentUserId &&
+              (item.title.toLowerCase().contains(lowerSearch) ||
+               item.description.toLowerCase().contains(lowerSearch)))
           .toList();
       
       return items;
     } catch (e) {
+      print('❌ Error searching items: $e');
       return [];
+    }
+  }
+
+  // Get a single item by ID
+  Future<ItemModel?> getItemById(String itemId) async {
+    if (DemoConfig.demoMode) {
+      await MockData.mockDelay();
+      try {
+        return _demoItems.firstWhere((item) => item.id == itemId);
+      } catch (e) {
+        return null;
+      }
+    }
+    
+    // Firebase mode
+    try {
+      final doc = await _firestore.collection('items').doc(itemId).get();
+      if (!doc.exists) return null;
+      return ItemModel.fromMap(doc.data()!, doc.id);
+    } catch (e) {
+      print('❌ Error fetching item: $e');
+      return null;
     }
   }
 
@@ -291,6 +385,9 @@ class FirebaseDatabaseService {
         final item = _demoItems.firstWhere((i) => i.id == request.itemId);
         
         if (status == 'approved') {
+          // Update item status to 'to_collect'
+          await updateItemStatus(item.id, 'to_collect');
+          
           await _createNotification(
             userId: request.finderId,
             title: 'Request Approved! ✅',
@@ -331,6 +428,11 @@ class FirebaseDatabaseService {
       // Get item for notification
       final itemDoc = await _firestore.collection('items').doc(request.itemId).get();
       final item = ItemModel.fromMap(itemDoc.data()!, itemDoc.id);
+      
+      // Update item status to 'to_collect' when request is approved
+      if (status == 'approved') {
+        await updateItemStatus(item.id, 'to_collect');
+      }
       
       // Create notification
       if (status == 'approved') {
@@ -387,6 +489,27 @@ class FirebaseDatabaseService {
             .toList());
   }
 
+  // Get single request
+  Future<RequestModel?> getRequest(String requestId) async {
+    if (DemoConfig.demoMode) {
+      await MockData.mockDelay();
+      try {
+        return _demoRequests.firstWhere((r) => r.id == requestId);
+      } catch (e) {
+        return null;
+      }
+    }
+    
+    // Firebase mode
+    try {
+      final doc = await _firestore.collection('requests').doc(requestId).get();
+      if (!doc.exists) return null;
+      return RequestModel.fromMap(doc.data()!, doc.id);
+    } catch (e) {
+      return null;
+    }
+  }
+
   // Stream request status (for finder)
   Stream<RequestModel> streamRequest(String requestId) {
     if (DemoConfig.demoMode) {
@@ -409,6 +532,141 @@ class FirebaseDatabaseService {
         .doc(requestId)
         .snapshots()
         .map((doc) => RequestModel.fromMap(doc.data()!, doc.id));
+  }
+
+  // Cancel/Delete request (for finder to cancel their pending request)
+  Future<Map<String, dynamic>> cancelRequest(String requestId) async {
+    if (DemoConfig.demoMode) {
+      await MockData.mockDelay();
+      final index = _demoRequests.indexWhere((r) => r.id == requestId);
+      if (index != -1) {
+        final request = _demoRequests[index];
+        
+        // Only allow canceling pending requests
+        if (request.status != 'pending') {
+          return {'success': false, 'error': 'Only pending requests can be canceled'};
+        }
+        
+        _demoRequests.removeAt(index);
+        
+        // Refresh streams
+        final finderKey = 'finder_requests_${request.finderId}';
+        if (_demoControllers.containsKey(finderKey)) {
+          final finderRequests = _demoRequests
+              .where((r) => r.finderId == request.finderId)
+              .toList()
+              ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+          _demoControllers[finderKey]!.add(finderRequests);
+        }
+        
+        final itemKey = 'item_requests_${request.itemId}';
+        if (_demoControllers.containsKey(itemKey)) {
+          final itemRequests = _demoRequests.where((r) => r.itemId == request.itemId).toList();
+          _demoControllers[itemKey]!.add(itemRequests);
+        }
+      }
+      
+      return {'success': true};
+    }
+    
+    // Firebase mode
+    try {
+      final requestDoc = await _firestore.collection('requests').doc(requestId).get();
+      if (!requestDoc.exists) {
+        return {'success': false, 'error': 'Request not found'};
+      }
+      
+      final request = RequestModel.fromMap(requestDoc.data()!, requestDoc.id);
+      
+      // Only allow canceling pending requests
+      if (request.status != 'pending') {
+        return {'success': false, 'error': 'Only pending requests can be canceled'};
+      }
+      
+      await _firestore.collection('requests').doc(requestId).delete();
+      return {'success': true};
+    } catch (e) {
+      return {'success': false, 'error': e.toString()};
+    }
+  }
+
+  // Delete item (for founder to delete items with "pending_storage" status)
+  Future<Map<String, dynamic>> deleteItem(String itemId) async {
+    if (DemoConfig.demoMode) {
+      await MockData.mockDelay();
+      final index = _demoItems.indexWhere((i) => i.id == itemId);
+      if (index != -1) {
+        final item = _demoItems[index];
+        
+        // Only allow deleting items with "pending_storage" status
+        if (item.status != 'pending_storage') {
+          return {'success': false, 'error': 'Only items with "pending_storage" status can be deleted'};
+        }
+        
+        // Check if there are any requests for this item
+        final hasRequests = _demoRequests.any((r) => r.itemId == itemId);
+        if (hasRequests) {
+          return {'success': false, 'error': 'Cannot delete item with active requests'};
+        }
+        
+        // Release the box if occupied
+        await _boxService.releaseBox(item.boxId);
+        
+        _demoItems.removeAt(index);
+        
+        // Refresh streams
+        final founderKey = 'founder_items_${item.founderId}';
+        if (_demoControllers.containsKey(founderKey)) {
+          final founderItems = _demoItems
+              .where((i) => i.founderId == item.founderId)
+              .toList()
+              ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+          _demoControllers[founderKey]!.add(founderItems);
+        }
+        
+        final allItemsKey = 'all_items';
+        if (_demoControllers.containsKey(allItemsKey)) {
+          final sortedItems = List<ItemModel>.from(_demoItems)
+            ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+          _demoControllers[allItemsKey]!.add(sortedItems);
+        }
+      }
+      
+      return {'success': true};
+    }
+    
+    // Firebase mode
+    try {
+      final itemDoc = await _firestore.collection('items').doc(itemId).get();
+      if (!itemDoc.exists) {
+        return {'success': false, 'error': 'Item not found'};
+      }
+      
+      final item = ItemModel.fromMap(itemDoc.data()!, itemDoc.id);
+      
+      // Only allow deleting items with "pending_storage" status
+      if (item.status != 'pending_storage') {
+        return {'success': false, 'error': 'Only items with "pending_storage" status can be deleted'};
+      }
+      
+      // Check if there are any requests for this item
+      final requestsSnapshot = await _firestore
+          .collection('requests')
+          .where('itemId', isEqualTo: itemId)
+          .get();
+      
+      if (requestsSnapshot.docs.isNotEmpty) {
+        return {'success': false, 'error': 'Cannot delete item with active requests'};
+      }
+      
+      // Release the box if occupied
+      await _boxService.releaseBox(item.boxId);
+      
+      await _firestore.collection('items').doc(itemId).delete();
+      return {'success': true};
+    } catch (e) {
+      return {'success': false, 'error': e.toString()};
+    }
   }
 
   // ============ NOTIFICATIONS ============
@@ -541,6 +799,54 @@ class FirebaseDatabaseService {
     }
   }
 
+  // Mark chat messages as read
+  Future<void> markChatMessagesAsRead(String chatRoomId, String currentUserId) async {
+    if (DemoConfig.demoMode) {
+      // Mark all messages in this chat room that were sent by others as read
+      for (int i = 0; i < _demoChatMessages.length; i++) {
+        final msg = _demoChatMessages[i];
+        if (msg.chatRoomId == chatRoomId && msg.senderId != currentUserId && !msg.isRead) {
+          _demoChatMessages[i] = msg.copyWith(isRead: true);
+        }
+      }
+      
+      // Update the stream
+      final key = 'chat_messages_$chatRoomId';
+      if (_demoControllers.containsKey(key)) {
+        final messages = _demoChatMessages
+            .where((m) => m.chatRoomId == chatRoomId)
+            .toList()
+            ..sort((a, b) => a.timestamp.compareTo(b.timestamp));
+        _demoControllers[key]!.add(messages);
+      }
+      
+      // Update all user messages stream
+      final allMsgKey = 'all_user_messages_$currentUserId';
+      if (_demoControllers.containsKey(allMsgKey)) {
+        final userRooms = _demoChatRooms.where((room) => 
+          room.founderId == currentUserId || room.finderId == currentUserId
+        ).map((room) => room.id).toList();
+        
+        final messages = _demoChatMessages
+            .where((m) => userRooms.contains(m.chatRoomId))
+            .toList();
+        _demoControllers[allMsgKey]!.add(messages);
+      }
+    } else {
+      // Firebase mode
+      final snapshot = await _firestore
+          .collection('messages')
+          .where('chatRoomId', isEqualTo: chatRoomId)
+          .where('senderId', isNotEqualTo: currentUserId)
+          .where('isRead', isEqualTo: false)
+          .get();
+      
+      for (var doc in snapshot.docs) {
+        await doc.reference.update({'isRead': true});
+      }
+    }
+  }
+
   // Get unread notification count
   int getUnreadNotificationCount(String userId) {
     if (DemoConfig.demoMode) {
@@ -551,6 +857,28 @@ class FirebaseDatabaseService {
     
     // For Firebase, this would need to be async, but for UI purposes we return 0
     // The actual count will be updated via the stream
+    return 0;
+  }
+
+  // Get unread chat count
+  int getUnreadChatCount(String userId) {
+    if (DemoConfig.demoMode) {
+      // Count chat rooms where the user has unread messages
+      int count = 0;
+      for (var room in _demoChatRooms) {
+        if (room.founderId == userId || room.finderId == userId) {
+          // Check if there are unread messages in this room
+          final hasUnread = _demoChatMessages.any((msg) =>
+              msg.chatRoomId == room.id &&
+              msg.senderId != userId &&
+              !msg.isRead);
+          if (hasUnread) count++;
+        }
+      }
+      return count;
+    }
+    
+    // For Firebase, this would need to be async, but for UI purposes we return 0
     return 0;
   }
 
@@ -818,6 +1146,48 @@ class FirebaseDatabaseService {
     } catch (e) {
       return {'success': false, 'error': e.toString()};
     }
+  }
+
+  // Stream all chat messages for a user (across all their chat rooms)
+  Stream<List<ChatMessageModel>> streamAllUserChatMessages(String userId) {
+    if (DemoConfig.demoMode) {
+      final key = 'all_user_messages_$userId';
+      
+      if (!_demoControllers.containsKey(key)) {
+        _demoControllers[key] = StreamController<List<ChatMessageModel>>.broadcast();
+      }
+      
+      // Get all chat rooms for this user
+      final userRooms = _demoChatRooms.where((room) => 
+        room.founderId == userId || room.finderId == userId
+      ).map((room) => room.id).toList();
+      
+      Future.delayed(const Duration(milliseconds: 100), () {
+        final messages = _demoChatMessages
+            .where((m) => userRooms.contains(m.chatRoomId))
+            .toList();
+        if (_demoControllers[key] != null && !_demoControllers[key]!.isClosed) {
+          _demoControllers[key]!.add(messages);
+        }
+      });
+      
+      return _demoControllers[key]!.stream as Stream<List<ChatMessageModel>>;
+    }
+    
+    // Firebase mode - get all chat rooms for user first, then get messages
+    return streamUserChatRooms(userId).asyncMap((chatRooms) async {
+      if (chatRooms.isEmpty) return <ChatMessageModel>[];
+      
+      final roomIds = chatRooms.map((room) => room.id).toList();
+      final snapshot = await _firestore
+          .collection('messages')
+          .where('chatRoomId', whereIn: roomIds)
+          .get();
+          
+      return snapshot.docs
+          .map((doc) => ChatMessageModel.fromMap(doc.data(), doc.id))
+          .toList();
+    });
   }
 
   // Stream chat messages

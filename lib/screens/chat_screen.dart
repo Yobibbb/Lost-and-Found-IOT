@@ -19,6 +19,18 @@ class _ChatScreenState extends State<ChatScreen> {
   final _scrollController = ScrollController();
 
   @override
+  void initState() {
+    super.initState();
+    // Mark messages as read when opening chat
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final dbService = Provider.of<FirebaseDatabaseService>(context, listen: false);
+      final authService = Provider.of<AuthService>(context, listen: false);
+      final currentUserId = authService.currentUser!.uid;
+      dbService.markChatMessagesAsRead(widget.chatRoomId, currentUserId);
+    });
+  }
+
+  @override
   void dispose() {
     _messageController.dispose();
     _scrollController.dispose();

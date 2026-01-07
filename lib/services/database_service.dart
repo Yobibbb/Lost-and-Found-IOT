@@ -26,8 +26,9 @@ class DatabaseService {
   Future<Map<String, dynamic>> createItem({
     required String title,
     required String description,
+    required String boxId,
+    required String location,
     String? deviceId,
-    String? location,
   }) async {
     await MockData.mockDelay();
     
@@ -39,9 +40,10 @@ class DatabaseService {
       founderId: user.uid,
       founderName: user.displayName ?? 'Demo User',
       founderEmail: user.email ?? '',
-      deviceId: deviceId,
+      boxId: boxId,
       location: location,
-      status: 'waiting',
+      deviceId: deviceId,
+      status: 'pending_storage',
       timestamp: DateTime.now(),
       createdAt: DateTime.now(),
     );
