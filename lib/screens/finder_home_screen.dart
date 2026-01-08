@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:google_fonts/google_fonts.dart';
 import '../models/request_model.dart';
 import '../models/notification_model.dart';
 import '../services/firebase_database_service.dart';
@@ -30,7 +31,7 @@ class _FinderHomeScreenState extends State<FinderHomeScreen> {
       appBar: AppBar(
         title: Text(
           _currentIndex == 0 ? '📋 My Requests' : '🔎 Search Items',
-          style: const TextStyle(fontWeight: FontWeight.bold),
+          style: GoogleFonts.inter(fontWeight: FontWeight.w600),
         ),
         backgroundColor: Colors.white,
         actions: [
@@ -211,10 +212,29 @@ class _RequestCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final dateFormat = DateFormat('MMM dd, yyyy - hh:mm a');
+    final dateFormat = DateFormat('MMM dd, hh:mm a');
     
-    return Card(
-      margin: const EdgeInsets.only(bottom: 16),
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            Colors.white,
+            Colors.grey.shade50,
+          ],
+        ),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.grey.shade200, width: 1),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.04),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
       child: InkWell(
         onTap: () {
           Navigator.of(context).push(
@@ -223,73 +243,103 @@ class _RequestCard extends StatelessWidget {
             ),
           );
         },
+        borderRadius: BorderRadius.circular(12),
         child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
+          padding: const EdgeInsets.all(12),
+          child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(
-                children: [
-                  const Expanded(
-                    child: Text(
-                      'Request',
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 18,
-                      ),
-                    ),
+              // Icon
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [
+                      const Color(0xFF6366F1),
+                      const Color(0xFF8B5CF6),
+                    ],
                   ),
-                  _StatusBadge(status: request.status),
-                ],
-              ),
-              const SizedBox(height: 12),
-              Text(
-                'Your description:',
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  color: Colors.grey[700],
-                  fontSize: 12,
+                  borderRadius: BorderRadius.circular(10),
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color(0xFF6366F1).withOpacity(0.3),
+                      blurRadius: 8,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
+                ),
+                child: const Icon(
+                  Icons.search_rounded,
+                  color: Colors.white,
+                  size: 20,
                 ),
               ),
-              const SizedBox(height: 4),
-              Text(
-                request.finderDescription,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(color: Colors.grey[700]),
-              ),
-              const SizedBox(height: 12),
-              Row(
-                children: [
-                  Icon(Icons.access_time, size: 14, color: Colors.grey[600]),
-                  const SizedBox(width: 4),
-                  Text(
-                    dateFormat.format(request.timestamp),
-                    style: TextStyle(fontSize: 12, color: Colors.grey[600]),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              Row(
-                children: [
-                  const Icon(Icons.touch_app, size: 16, color: Colors.blue),
-                  const SizedBox(width: 4),
-                  const Text(
-                    'Tap to view details',
-                    style: TextStyle(color: Colors.blue, fontSize: 12),
-                  ),
-                  const Spacer(),
-                  if (request.status == 'pending')
-                    TextButton.icon(
-                      onPressed: () => _showCancelDialog(context, request),
-                      icon: const Icon(Icons.cancel, size: 16),
-                      label: const Text('Cancel'),
-                      style: TextButton.styleFrom(
-                        foregroundColor: Colors.red,
-                        padding: const EdgeInsets.symmetric(horizontal: 8),
+              const SizedBox(width: 12),
+              // Content
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        const Expanded(
+                          child: Text(
+                            'Request',
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 15,
+                              letterSpacing: -0.2,
+                            ),
+                          ),
+                        ),
+                        _StatusBadge(status: request.status),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      request.finderDescription,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: Colors.grey[600],
+                        fontSize: 13,
+                        height: 1.3,
                       ),
                     ),
-                ],
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        Icon(Icons.access_time_rounded, 
+                          size: 12, 
+                          color: Colors.grey[500]
+                        ),
+                        const SizedBox(width: 4),
+                        Expanded(
+                          child: Text(
+                            dateFormat.format(request.timestamp),
+                            style: TextStyle(fontSize: 11, color: Colors.grey[600]),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        if (request.status == 'pending')
+                          TextButton.icon(
+                            onPressed: () => _showCancelDialog(context, request),
+                            icon: const Icon(Icons.cancel, size: 14),
+                            label: const Text('Cancel', style: TextStyle(fontSize: 11)),
+                            style: TextButton.styleFrom(
+                              foregroundColor: Colors.red,
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                              minimumSize: Size.zero,
+                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                            ),
+                          ),
+                      ],
+                    ),
+                  ],
+                ),
               ),
             ],
           ),
@@ -358,36 +408,48 @@ class _StatusBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     Color color;
+    IconData icon;
     String label;
     
     switch (status) {
       case 'approved':
-        color = Colors.green;
+        color = const Color(0xFF10B981);
+        icon = Icons.check_circle_rounded;
         label = 'Approved';
         break;
       case 'rejected':
-        color = Colors.red;
+        color = const Color(0xFFEF4444);
+        icon = Icons.cancel_rounded;
         label = 'Rejected';
         break;
       case 'pending':
       default:
-        color = Colors.orange;
+        color = const Color(0xFFF59E0B);
+        icon = Icons.pending_rounded;
         label = 'Pending';
     }
     
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
       decoration: BoxDecoration(
-        color: color,
-        borderRadius: BorderRadius.circular(12),
+        color: color.withOpacity(0.15),
+        borderRadius: BorderRadius.circular(6),
       ),
-      child: Text(
-        label,
-        style: const TextStyle(
-          color: Colors.white,
-          fontSize: 12,
-          fontWeight: FontWeight.bold,
-        ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 10, color: color),
+          const SizedBox(width: 3),
+          Text(
+            label,
+            style: TextStyle(
+              color: color,
+              fontSize: 10,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 0.3,
+            ),
+          ),
+        ],
       ),
     );
   }

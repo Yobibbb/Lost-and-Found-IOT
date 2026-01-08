@@ -177,20 +177,26 @@ class _NotificationTile extends StatelessWidget {
     final dateFormat = DateFormat('MMM dd, hh:mm a');
     
     return Container(
-      margin: const EdgeInsets.only(bottom: 12),
+      margin: const EdgeInsets.only(bottom: 10),
       decoration: BoxDecoration(
-        color: Colors.white,
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: notification.isRead
+              ? [Colors.white, Colors.grey.shade50]
+              : [Colors.white, _getColor().withOpacity(0.05)],
+        ),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
           color: notification.isRead 
               ? Colors.grey.shade200 
               : _getColor().withOpacity(0.3),
-          width: notification.isRead ? 1 : 2,
+          width: 1,
         ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.03),
-            blurRadius: 8,
+            color: Colors.black.withOpacity(0.04),
+            blurRadius: 6,
             offset: const Offset(0, 2),
           ),
         ],
@@ -199,20 +205,34 @@ class _NotificationTile extends StatelessWidget {
         onTap: () => _handleTap(context),
         borderRadius: BorderRadius.circular(12),
         child: Padding(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.all(12),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Container(
-                padding: const EdgeInsets.all(10),
+                padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  color: _getColor().withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(10),
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [
+                      _getColor(),
+                      _getColor().withOpacity(0.8),
+                    ],
+                  ),
+                  borderRadius: BorderRadius.circular(8),
+                  boxShadow: [
+                    BoxShadow(
+                      color: _getColor().withOpacity(0.3),
+                      blurRadius: 6,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
                 ),
                 child: Icon(
                   _getIcon(),
-                  color: _getColor(),
-                  size: 24,
+                  color: Colors.white,
+                  size: 18,
                 ),
               ),
               const SizedBox(width: 12),
@@ -229,14 +249,17 @@ class _NotificationTile extends StatelessWidget {
                               fontWeight: notification.isRead 
                                   ? FontWeight.w600 
                                   : FontWeight.bold,
-                              fontSize: 15,
+                              fontSize: 14,
+                              letterSpacing: -0.2,
                             ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                           ),
                         ),
                         if (!notification.isRead)
                           Container(
-                            width: 8,
-                            height: 8,
+                            width: 7,
+                            height: 7,
                             decoration: BoxDecoration(
                               color: _getColor(),
                               shape: BoxShape.circle,
@@ -244,28 +267,30 @@ class _NotificationTile extends StatelessWidget {
                           ),
                       ],
                     ),
-                    const SizedBox(height: 6),
+                    const SizedBox(height: 4),
                     Text(
                       notification.message,
                       style: TextStyle(
-                        fontSize: 14,
-                        color: Colors.grey[700],
-                        height: 1.4,
+                        fontSize: 13,
+                        color: Colors.grey[600],
+                        height: 1.3,
                       ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
                     ),
-                    const SizedBox(height: 8),
+                    const SizedBox(height: 6),
                     Row(
                       children: [
                         Icon(
                           Icons.access_time_rounded,
-                          size: 14,
+                          size: 12,
                           color: Colors.grey[500],
                         ),
                         const SizedBox(width: 4),
                         Text(
                           dateFormat.format(notification.createdAt),
                           style: TextStyle(
-                            fontSize: 12,
+                            fontSize: 11,
                             color: Colors.grey[500],
                           ),
                         ),

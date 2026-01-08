@@ -8,6 +8,7 @@ class ChatMessageModel {
   final String message;
   final DateTime timestamp;
   final bool isRead;
+  final String? imageUrl;
 
   ChatMessageModel({
     required this.id,
@@ -17,6 +18,7 @@ class ChatMessageModel {
     required this.message,
     required this.timestamp,
     required this.isRead,
+    this.imageUrl,
   });
 
   factory ChatMessageModel.fromMap(Map<String, dynamic> map, String id) {
@@ -28,6 +30,7 @@ class ChatMessageModel {
       message: map['message'] ?? '',
       timestamp: _parseDateTime(map['timestamp']),
       isRead: map['isRead'] ?? false,
+      imageUrl: map['imageUrl'],
     );
   }
 
@@ -46,6 +49,7 @@ class ChatMessageModel {
       'message': message,
       'timestamp': timestamp.toIso8601String(),
       'isRead': isRead,
+      'imageUrl': imageUrl,
     };
   }
 
@@ -57,6 +61,7 @@ class ChatMessageModel {
     String? message,
     DateTime? timestamp,
     bool? isRead,
+    String? imageUrl,
   }) {
     return ChatMessageModel(
       id: id ?? this.id,
@@ -66,6 +71,7 @@ class ChatMessageModel {
       message: message ?? this.message,
       timestamp: timestamp ?? this.timestamp,
       isRead: isRead ?? this.isRead,
+      imageUrl: imageUrl ?? this.imageUrl,
     );
   }
 }

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:google_fonts/google_fonts.dart';
 import '../services/auth_service.dart';
 
 class AuthScreen extends StatefulWidget {
@@ -93,8 +94,9 @@ class _AuthScreenState extends State<AuthScreen> {
                   
                   Text(
                     _isSignUp ? 'Create Account' : 'Welcome Back',
-                    style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                      fontWeight: FontWeight.bold,
+                    style: GoogleFonts.inter(
+                      fontSize: 32,
+                      fontWeight: FontWeight.w700,
                     ),
                     textAlign: TextAlign.center,
                   ),
@@ -103,7 +105,7 @@ class _AuthScreenState extends State<AuthScreen> {
                     _isSignUp 
                         ? 'Sign up to report and find lost items'
                         : 'Sign in to continue your search',
-                    style: TextStyle(
+                    style: GoogleFonts.inter(
                       color: Colors.grey.shade600,
                       fontSize: 14,
                     ),

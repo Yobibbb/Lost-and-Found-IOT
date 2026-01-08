@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'firebase_options.dart';
 import 'package:provider/provider.dart';
 import 'config/demo_config.dart';
+import 'config/supabase_config.dart';
 import 'services/auth_service.dart';
 import 'services/firebase_database_service.dart';
 import 'services/box_service.dart';
@@ -11,8 +14,16 @@ import 'screens/role_selection_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  
+  // Initialize Firebase
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
+  );
+  
+  // Initialize Supabase (for image storage only)
+  await Supabase.initialize(
+    url: SupabaseConfig.supabaseUrl,
+    anonKey: SupabaseConfig.supabaseAnonKey,
   );
   
   // Initialize boxes in Firebase (only runs once if boxes don't exist)
@@ -45,6 +56,9 @@ class MyApp extends StatelessWidget {
             brightness: Brightness.light,
           ),
           useMaterial3: true,
+          textTheme: GoogleFonts.interTextTheme(
+            Theme.of(context).textTheme,
+          ),
           cardTheme: CardThemeData(
             elevation: 0,
             shape: RoundedRectangleBorder(

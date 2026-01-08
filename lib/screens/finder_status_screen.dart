@@ -95,6 +95,46 @@ class FinderStatusScreen extends StatelessWidget {
                     ),
                   ),
                 ),
+                const SizedBox(height: 16),
+                
+                // Item Description Card
+                if (item != null)
+                  Card(
+                    color: Colors.amber[50],
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Icon(Icons.inventory_2_outlined, color: Colors.amber[800]),
+                              const SizedBox(width: 8),
+                              const Text(
+                                'Item Details',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 16,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 12),
+                          const Text(
+                            'Title:',
+                            style: TextStyle(fontWeight: FontWeight.bold),
+                          ),
+                          Text(item.title),
+                          const SizedBox(height: 8),
+                          const Text(
+                            'Description:',
+                            style: TextStyle(fontWeight: FontWeight.bold),
+                          ),
+                          Text(item.description),
+                        ],
+                      ),
+                    ),
+                  ),
                 const SizedBox(height: 24),
                 
                 if (request.status == 'pending')

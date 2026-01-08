@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:google_fonts/google_fonts.dart';
 import '../services/auth_service.dart';
 import 'founder_home_screen.dart';
 import 'finder_home_screen.dart';
@@ -15,9 +16,9 @@ class RoleSelectionScreen extends StatelessWidget {
     return Scaffold(
       backgroundColor: Colors.grey.shade50,
       appBar: AppBar(
-        title: const Text(
+        title: Text(
           'Lost & Found',
-          style: TextStyle(fontWeight: FontWeight.bold),
+          style: GoogleFonts.inter(fontWeight: FontWeight.w600),
         ),
         backgroundColor: Colors.white,
         actions: [
@@ -42,8 +43,9 @@ class RoleSelectionScreen extends StatelessWidget {
               children: [
                 Text(
                   'Hello, ${user?.displayName ?? "User"}! 👋',
-                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                    fontWeight: FontWeight.bold,
+                  style: GoogleFonts.inter(
+                    fontSize: 28,
+                    fontWeight: FontWeight.w700,
                   ),
                   textAlign: TextAlign.center,
                 ),
@@ -51,7 +53,7 @@ class RoleSelectionScreen extends StatelessWidget {
                 
                 Text(
                   'What would you like to do today?',
-                  style: TextStyle(
+                  style: GoogleFonts.inter(
                     fontSize: 16,
                     color: Colors.grey.shade600,
                   ),
@@ -101,11 +103,11 @@ class RoleSelectionScreen extends StatelessWidget {
                           ),
                         ),
                         const SizedBox(height: 20),
-                        const Text(
+                        Text(
                           'I Found Something',
-                          style: TextStyle(
+                          style: GoogleFonts.inter(
                             fontSize: 24,
-                            fontWeight: FontWeight.bold,
+                            fontWeight: FontWeight.w700,
                             color: Colors.white,
                           ),
                         ),
@@ -113,7 +115,7 @@ class RoleSelectionScreen extends StatelessWidget {
                         Text(
                           'Report an item you found and help reunite it with its owner',
                           textAlign: TextAlign.center,
-                          style: TextStyle(
+                          style: GoogleFonts.inter(
                             color: Colors.white.withOpacity(0.95),
                             fontSize: 15,
                           ),
@@ -166,11 +168,11 @@ class RoleSelectionScreen extends StatelessWidget {
                           ),
                         ),
                         const SizedBox(height: 20),
-                        const Text(
+                        Text(
                           'I Lost Something',
-                          style: TextStyle(
+                          style: GoogleFonts.inter(
                             fontSize: 24,
-                            fontWeight: FontWeight.bold,
+                            fontWeight: FontWeight.w700,
                             color: Colors.white,
                           ),
                         ),
@@ -178,7 +180,7 @@ class RoleSelectionScreen extends StatelessWidget {
                         Text(
                           'Search for your lost item and request to retrieve it',
                           textAlign: TextAlign.center,
-                          style: TextStyle(
+                          style: GoogleFonts.inter(
                             color: Colors.white.withOpacity(0.95),
                             fontSize: 15,
                           ),
