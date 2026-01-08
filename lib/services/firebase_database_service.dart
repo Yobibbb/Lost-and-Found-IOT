@@ -280,6 +280,16 @@ class FirebaseDatabaseService {
         _demoControllers[key]!.add(requests);
       }
       
+      // Create or get chat room (without sending initial message)
+      await createOrGetChatRoom(
+        itemId: itemId,
+        founderId: item.founderId,
+        founderName: item.founderName,
+        finderId: user.uid,
+        finderName: user.displayName ?? 'Demo User',
+        itemTitle: item.title,
+      );
+      
       return {'success': true, 'requestId': newRequest.id};
     }
     
@@ -320,6 +330,19 @@ class FirebaseDatabaseService {
       });
       
       print('🔔 Notification sent to founder');
+      
+      // Create or get chat room (without sending initial message)
+      print('💬 Creating chat room...');
+      await createOrGetChatRoom(
+        itemId: itemId,
+        founderId: item.founderId,
+        founderName: item.founderName,
+        finderId: user.uid,
+        finderName: user.displayName ?? 'User',
+        itemTitle: item.title,
+      );
+      
+      print('✅ Chat room created/retrieved');
       
       return {'success': true, 'requestId': requestRef.id};
     } catch (e) {
