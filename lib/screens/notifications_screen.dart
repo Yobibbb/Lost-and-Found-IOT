@@ -157,18 +157,53 @@ class _NotificationTile extends StatelessWidget {
       }
     } else if (notification.type == 'request_approved' || notification.type == 'request_rejected') {
       if (notification.relatedId != null) {
-        Navigator.of(context).push(
-          MaterialPageRoute(
-            builder: (_) => FinderStatusScreen(requestId: notification.relatedId!),
-          ),
-        );
+        try {
+          final request = await dbService.getRequest(notification.relatedId!);
+          if (context.mounted) {
+            if (request != null) {
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => FinderStatusScreen(requestId: notification.relatedId!),
+                ),
+              );
+            } else {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('This request is no longer available')),
+              );
+            }
+          }
+        } catch (e) {
+          if (context.mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Could not open request')),
+            );
+          }
+        }
       }
     } else if (notification.type == 'new_message' && notification.relatedId != null) {
-      Navigator.of(context).push(
-        MaterialPageRoute(
-          builder: (_) => ChatScreen(chatRoomId: notification.relatedId!),
-        ),
-      );
+      // Check if chat room still exists before opening
+      try {
+        final chatRoom = await dbService.getChatRoomById(notification.relatedId!);
+        if (context.mounted) {
+          if (chatRoom != null) {
+            Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (_) => ChatScreen(chatRoomId: notification.relatedId!),
+              ),
+            );
+          } else {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('This conversation is no longer available')),
+            );
+          }
+        }
+      } catch (e) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Could not open chat')),
+          );
+        }
+      }
     }
   }
 

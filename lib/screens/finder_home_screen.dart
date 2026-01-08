@@ -284,14 +284,23 @@ class _RequestCard extends StatelessWidget {
                   children: [
                     Row(
                       children: [
-                        const Expanded(
-                          child: Text(
-                            'Request',
-                            style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 15,
-                              letterSpacing: -0.2,
-                            ),
+                        Expanded(
+                          child: FutureBuilder(
+                            future: Provider.of<FirebaseDatabaseService>(context, listen: false)
+                                .getItemById(request.itemId),
+                            builder: (context, snapshot) {
+                              final itemName = snapshot.data?.title ?? 'Request';
+                              return Text(
+                                itemName,
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 15,
+                                  letterSpacing: -0.2,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              );
+                            },
                           ),
                         ),
                         _StatusBadge(status: request.status),

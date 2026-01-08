@@ -87,7 +87,7 @@ class FinderStatusScreen extends StatelessWidget {
                         Text('To: ${request.finderName}'),
                         const SizedBox(height: 8),
                         const Text(
-                          'Your description:',
+                          'Your message:',
                           style: TextStyle(fontWeight: FontWeight.bold),
                         ),
                         Text(request.finderDescription),

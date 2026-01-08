@@ -155,7 +155,7 @@ class _FounderRequestsScreenState extends State<FounderRequestsScreen> {
                       const SizedBox(height: 12),
                       
                       Text(
-                        'Description:',
+                        'Message:',
                         style: TextStyle(
                           fontWeight: FontWeight.bold,
                           color: Colors.grey[700],

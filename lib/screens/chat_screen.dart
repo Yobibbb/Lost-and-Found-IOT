@@ -139,107 +139,14 @@ class _ChatScreenState extends State<ChatScreen> {
         return Scaffold(
           appBar: AppBar(
             centerTitle: false,
-            title: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  otherPersonName,
-                  style: GoogleFonts.inter(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w600,
-                  ),
-                  overflow: TextOverflow.ellipsis,
-                  maxLines: 1,
-                ),
-                if (chatRoom != null)
-                  GestureDetector(
-                    onTap: () async {
-                      // Fetch full item details
-                      final dbService = Provider.of<FirebaseDatabaseService>(context, listen: false);
-                      final item = await dbService.getItemById(chatRoom.itemId);
-                      
-                      if (!mounted) return;
-                      
-                      showDialog(
-                        context: context,
-                        builder: (context) => AlertDialog(
-                          title: Text(
-                            'Item Details',
-                            style: GoogleFonts.inter(
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                          content: item != null
-                              ? Column(
-                                  mainAxisSize: MainAxisSize.min,
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      'Title:',
-                                      style: GoogleFonts.inter(
-                                        fontWeight: FontWeight.w600,
-                                        fontSize: 14,
-                                      ),
-                                    ),
-                                    const SizedBox(height: 4),
-                                    Text(
-                                      item.title,
-                                      style: GoogleFonts.inter(fontSize: 16),
-                                    ),
-                                    const SizedBox(height: 16),
-                                    Text(
-                                      'Description:',
-                                      style: GoogleFonts.inter(
-                                        fontWeight: FontWeight.w600,
-                                        fontSize: 14,
-                                      ),
-                                    ),
-                                    const SizedBox(height: 4),
-                                    Text(
-                                      item.description,
-                                      style: GoogleFonts.inter(fontSize: 16),
-                                    ),
-                                  ],
-                                )
-                              : Text(
-                                  chatRoom.itemTitle,
-                                  style: GoogleFonts.inter(fontSize: 16),
-                                ),
-                          actions: [
-                            TextButton(
-                              onPressed: () => Navigator.pop(context),
-                              child: const Text('Close'),
-                            ),
-                          ],
-                        ),
-                      );
-                    },
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Flexible(
-                          child: Text(
-                            chatRoom.itemTitle,
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: Colors.grey[600],
-                              fontWeight: FontWeight.normal,
-                            ),
-                            overflow: TextOverflow.ellipsis,
-                            maxLines: 1,
-                          ),
-                        ),
-                        const SizedBox(width: 4),
-                        Icon(
-                          Icons.info_outline,
-                          size: 14,
-                          color: Colors.grey[600],
-                        ),
-                      ],
-                    ),
-                  ),
-              ],
+            title: Text(
+              otherPersonName,
+              style: GoogleFonts.inter(
+                fontSize: 18,
+                fontWeight: FontWeight.w600,
+              ),
+              overflow: TextOverflow.ellipsis,
+              maxLines: 1,
             ),
           ),
           body: Column(
@@ -284,9 +191,14 @@ class _ChatScreenState extends State<ChatScreen> {
                 return ListView.builder(
                   controller: _scrollController,
                   padding: const EdgeInsets.all(16),
-                  itemCount: messages.length,
+                  itemCount: messages.length + 1, // +1 for item description
                   itemBuilder: (context, index) {
-                    final message = messages[index];
+                    // Show item description as first message
+                    if (index == 0) {
+                      return _ItemDescriptionCard(chatRoom: chatRoom);
+                    }
+                    
+                    final message = messages[index - 1];
                     final isMe = message.senderId == currentUserId;
                     return _MessageBubble(message: message, isMe: isMe);
                   },
@@ -610,6 +522,89 @@ class _MessageBubble extends StatelessWidget {
           ],
         ],
       ),
+    );
+  }
+}
+
+class _ItemDescriptionCard extends StatelessWidget {
+  final ChatRoomModel? chatRoom;
+
+  const _ItemDescriptionCard({required this.chatRoom});
+
+  @override
+  Widget build(BuildContext context) {
+    if (chatRoom == null) return const SizedBox.shrink();
+
+    final dbService = Provider.of<FirebaseDatabaseService>(context, listen: false);
+
+    return FutureBuilder(
+      future: dbService.getItemById(chatRoom!.itemId),
+      builder: (context, snapshot) {
+        final item = snapshot.data;
+        
+        return Container(
+          margin: const EdgeInsets.only(bottom: 16),
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                const Color(0xFF6366F1).withOpacity(0.1),
+                const Color(0xFF8B5CF6).withOpacity(0.1),
+              ],
+            ),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: const Color(0xFF6366F1).withOpacity(0.3),
+              width: 1,
+            ),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(
+                    Icons.info_outline,
+                    color: const Color(0xFF6366F1),
+                    size: 20,
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Item Information',
+                    style: GoogleFonts.inter(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: const Color(0xFF6366F1),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Text(
+                item?.title ?? chatRoom!.itemTitle,
+                style: GoogleFonts.inter(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.black87,
+                ),
+              ),
+              if (item != null) ...[
+                const SizedBox(height: 8),
+                Text(
+                  item.description,
+                  style: GoogleFonts.inter(
+                    fontSize: 14,
+                    color: Colors.black87,
+                    height: 1.4,
+                  ),
+                ),
+              ],
+            ],
+          ),
+        );
+      },
     );
   }
 }

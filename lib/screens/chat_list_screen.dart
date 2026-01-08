@@ -13,25 +13,26 @@ class ChatListScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final dbService = Provider.of<FirebaseDatabaseService>(context, listen: false);
     final authService = Provider.of<AuthService>(context, listen: false);
+    final currentUserId = authService.currentUser!.uid;
     
     return Scaffold(
       appBar: AppBar(
         title: const Text('Messages'),
       ),
       body: StreamBuilder<List<ChatRoomModel>>(
-        stream: dbService.streamUserChatRooms(authService.currentUser!.uid),
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
+        stream: dbService.streamUserChatRooms(currentUserId),
+        builder: (context, chatSnapshot) {
+          if (chatSnapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
           }
           
-          if (snapshot.hasError) {
-            return Center(child: Text('Error: ${snapshot.error}'));
+          if (chatSnapshot.hasError) {
+            return Center(child: Text('Error: ${chatSnapshot.hasError}'));
           }
           
-          final chatRooms = snapshot.data ?? [];
+          final allChatRooms = chatSnapshot.data ?? [];
           
-          if (chatRooms.isEmpty) {
+          if (allChatRooms.isEmpty) {
             return Center(
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
@@ -52,14 +53,14 @@ class ChatListScreen extends StatelessWidget {
               ),
             );
           }
-          
+
           return ListView.builder(
-            itemCount: chatRooms.length,
+            itemCount: allChatRooms.length,
             itemBuilder: (context, index) {
-              final chatRoom = chatRooms[index];
-              final isFounder = chatRoom.founderId == authService.currentUser!.uid;
+              final chatRoom = allChatRooms[index];
+              final isFounder = chatRoom.founderId == currentUserId;
               final otherPersonName = isFounder ? chatRoom.finderName : chatRoom.founderName;
-              
+          
               return _ChatRoomTile(
                 chatRoom: chatRoom,
                 otherPersonName: otherPersonName,

@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 import '../models/item_model.dart';
 import '../services/firebase_database_service.dart';
+import '../services/auth_service.dart';
 import 'finder_status_screen.dart';
 
 class FinderResultsScreen extends StatelessWidget {
@@ -17,6 +18,10 @@ class FinderResultsScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final dbService = Provider.of<FirebaseDatabaseService>(context, listen: false);
+    final authService = Provider.of<AuthService>(context, listen: false);
+    final currentUserId = authService.currentUser!.uid;
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Search Results'),
@@ -47,12 +52,33 @@ class FinderResultsScreen extends StatelessWidget {
                 ],
               ),
             )
-          : ListView.builder(
-              padding: const EdgeInsets.all(16),
-              itemCount: searchResults.length,
-              itemBuilder: (context, index) {
-                final item = searchResults[index];
-                return _ItemCard(item: item);
+          : FutureBuilder(
+              future: dbService.getFinderRequests(currentUserId),
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+
+                // Get list of item IDs that user has PENDING requests for
+                // Only show "Already Requested" for pending requests
+                // If rejected or cancelled, they can request again
+                final requestedItemIds = (snapshot.data ?? [])
+                    .where((request) => request.status == 'pending')
+                    .map((request) => request.itemId)
+                    .toSet();
+
+                return ListView.builder(
+                  padding: const EdgeInsets.all(16),
+                  itemCount: searchResults.length,
+                  itemBuilder: (context, index) {
+                    final item = searchResults[index];
+                    final alreadyRequested = requestedItemIds.contains(item.id);
+                    return _ItemCard(
+                      item: item,
+                      alreadyRequested: alreadyRequested,
+                    );
+                  },
+                );
               },
             ),
     );
@@ -61,8 +87,12 @@ class FinderResultsScreen extends StatelessWidget {
 
 class _ItemCard extends StatefulWidget {
   final ItemModel item;
+  final bool alreadyRequested;
   
-  const _ItemCard({required this.item});
+  const _ItemCard({
+    required this.item,
+    this.alreadyRequested = false,
+  });
 
   @override
   State<_ItemCard> createState() => _ItemCardState();
@@ -82,7 +112,7 @@ class _ItemCardState extends State<_ItemCard> {
   Future<void> _sendRequest() async {
     if (_descriptionController.text.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please provide additional details')),
+        const SnackBar(content: Text('Please write a message')),
       );
       return;
     }
@@ -181,6 +211,36 @@ class _ItemCardState extends State<_ItemCard> {
                     ],
                   ),
                 ),
+                if (widget.alreadyRequested) ...[
+                  const SizedBox(height: 6),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: Colors.orange.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(6),
+                      border: Border.all(color: Colors.orange.withOpacity(0.3)),
+                    ),
+                    child: const Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.check_circle_outline,
+                          size: 14,
+                          color: Colors.orange,
+                        ),
+                        SizedBox(width: 6),
+                        Text(
+                          'Already Requested',
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: Colors.orange,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
               ],
             ),
             trailing: IconButton(
@@ -198,31 +258,57 @@ class _ItemCardState extends State<_ItemCard> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  const Text(
-                    'Why do you think this is yours?',
-                    style: TextStyle(fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: 8),
-                  TextField(
-                    controller: _descriptionController,
-                    decoration: const InputDecoration(
-                      hintText: 'Provide specific details to prove ownership...',
-                      border: OutlineInputBorder(),
+                  if (widget.alreadyRequested) ...[
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.orange.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: Colors.orange.withOpacity(0.3)),
+                      ),
+                      child: const Row(
+                        children: [
+                          Icon(Icons.info_outline, color: Colors.orange, size: 20),
+                          SizedBox(width: 12),
+                          Expanded(
+                            child: Text(
+                              'You have already sent a request for this item',
+                              style: TextStyle(
+                                color: Colors.orange,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
-                    maxLines: 3,
-                  ),
-                  const SizedBox(height: 16),
-                  ElevatedButton.icon(
-                    onPressed: _isLoading ? null : _sendRequest,
-                    icon: const Icon(Icons.send),
-                    label: _isLoading
-                        ? const SizedBox(
-                            height: 20,
-                            width: 20,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : const Text('Send Request'),
-                  ),
+                  ] else ...[
+                    const Text(
+                      'Why do you think this is yours?',
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(height: 8),
+                    TextField(
+                      controller: _descriptionController,
+                      decoration: const InputDecoration(
+                        hintText: 'Provide specific details to prove ownership...',
+                        border: OutlineInputBorder(),
+                      ),
+                      maxLines: 3,
+                    ),
+                    const SizedBox(height: 16),
+                    ElevatedButton.icon(
+                      onPressed: _isLoading ? null : _sendRequest,
+                      icon: const Icon(Icons.send),
+                      label: _isLoading
+                          ? const SizedBox(
+                              height: 20,
+                              width: 20,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Text('Send Request'),
+                    ),
+                  ],
                 ],
               ),
             ),

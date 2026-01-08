@@ -283,14 +283,26 @@ class FirebaseDatabaseService {
         _demoControllers[key]!.add(requests);
       }
       
-      // Create or get chat room (without sending initial message)
-      await createOrGetChatRoom(
+      // Delete any existing chat room for this item and finder
+      // This ensures a fresh start if they're requesting again after cancellation/rejection
+      _demoChatRooms.removeWhere((room) =>
+          room.itemId == itemId &&
+          room.finderId == user.uid);
+      
+      // Create new chat room
+      final chatRoomId = await createOrGetChatRoom(
         itemId: itemId,
         founderId: item.founderId,
         founderName: item.founderName,
         finderId: user.uid,
         finderName: user.displayName ?? 'Demo User',
         itemTitle: item.title,
+      );
+      
+      // Send the finder's description as the first chat message
+      await sendMessage(
+        chatRoomId: chatRoomId,
+        message: finderDescription,
       );
       
       return {'success': true, 'requestId': newRequest.id};
@@ -334,9 +346,22 @@ class FirebaseDatabaseService {
       
       print('🔔 Notification sent to founder');
       
+      // Delete any existing chat room for this item and finder
+      // This ensures a fresh start if they're requesting again after cancellation/rejection
+      print('🗑️ Deleting old chat rooms...');
+      final oldChatRooms = await _firestore
+          .collection('chatRooms')
+          .where('itemId', isEqualTo: itemId)
+          .where('finderId', isEqualTo: user.uid)
+          .get();
+      
+      for (var doc in oldChatRooms.docs) {
+        await doc.reference.delete();
+      }
+      
       // Create or get chat room (without sending initial message)
       print('💬 Creating chat room...');
-      await createOrGetChatRoom(
+      final chatRoomId = await createOrGetChatRoom(
         itemId: itemId,
         founderId: item.founderId,
         founderName: item.founderName,
@@ -346,6 +371,15 @@ class FirebaseDatabaseService {
       );
       
       print('✅ Chat room created/retrieved');
+      
+      // Send the finder's description as the first chat message
+      print('📨 Sending initial message...');
+      await sendMessage(
+        chatRoomId: chatRoomId,
+        message: finderDescription,
+      );
+      
+      print('✅ Initial message sent');
       
       return {'success': true, 'requestId': requestRef.id};
     } catch (e) {
@@ -414,6 +448,33 @@ class FirebaseDatabaseService {
           // Update item status to 'to_collect'
           await updateItemStatus(item.id, 'to_collect');
           
+          // Auto-reject all other pending requests for this item
+          for (int i = 0; i < _demoRequests.length; i++) {
+            if (_demoRequests[i].itemId == request.itemId && 
+                _demoRequests[i].id != requestId && 
+                _demoRequests[i].status == 'pending') {
+              final rejectedRequest = _demoRequests[i].copyWith(
+                status: 'rejected',
+                rejectedAt: DateTime.now(),
+              );
+              _demoRequests[i] = rejectedRequest;
+              
+              // Delete chat room for auto-rejected request
+              _demoChatRooms.removeWhere((room) =>
+                  room.itemId == rejectedRequest.itemId &&
+                  room.finderId == rejectedRequest.finderId);
+              
+              // Notify the finder
+              await _createNotification(
+                userId: rejectedRequest.finderId,
+                title: 'Request Rejected',
+                message: 'Your request for "${item.title}" was not approved. Another finder was selected.',
+                type: 'request_rejected',
+                relatedId: rejectedRequest.id,
+              );
+            }
+          }
+          
           await _createNotification(
             userId: request.finderId,
             title: 'Request Approved! ✅',
@@ -422,6 +483,11 @@ class FirebaseDatabaseService {
             relatedId: requestId,
           );
         } else if (status == 'rejected') {
+          // Delete associated chat room when rejected
+          _demoChatRooms.removeWhere((room) =>
+              room.itemId == request.itemId &&
+              room.finderId == request.finderId);
+          
           await _createNotification(
             userId: request.finderId,
             title: 'Request Rejected',
@@ -458,6 +524,47 @@ class FirebaseDatabaseService {
       // Update item status to 'to_collect' when request is approved
       if (status == 'approved') {
         await updateItemStatus(item.id, 'to_collect');
+        
+        // Auto-reject all other pending requests for this item
+        final otherRequestsSnapshot = await _firestore
+            .collection('requests')
+            .where('itemId', isEqualTo: request.itemId)
+            .where('status', isEqualTo: 'pending')
+            .get();
+        
+        for (var doc in otherRequestsSnapshot.docs) {
+          if (doc.id != requestId) {
+            // Update to rejected
+            await doc.reference.update({
+              'status': 'rejected',
+              'rejectedAt': FieldValue.serverTimestamp(),
+            });
+            
+            final otherRequest = RequestModel.fromMap(doc.data(), doc.id);
+            
+            // Delete associated chat room
+            final chatRooms = await _firestore
+                .collection('chatRooms')
+                .where('itemId', isEqualTo: otherRequest.itemId)
+                .where('finderId', isEqualTo: otherRequest.finderId)
+                .get();
+            
+            for (var chatDoc in chatRooms.docs) {
+              await chatDoc.reference.delete();
+            }
+            
+            // Notify the finder
+            await _firestore.collection('notifications').add({
+              'userId': otherRequest.finderId,
+              'title': 'Request Rejected',
+              'message': 'Your request for "${item.title}" was not approved. Another finder was selected.',
+              'type': 'request_rejected',
+              'relatedId': doc.id,
+              'isRead': false,
+              'createdAt': FieldValue.serverTimestamp(),
+            });
+          }
+        }
       }
       
       // Create notification
@@ -472,6 +579,17 @@ class FirebaseDatabaseService {
           'createdAt': FieldValue.serverTimestamp(),
         });
       } else if (status == 'rejected') {
+        // Delete associated chat room when rejected
+        final chatRooms = await _firestore
+            .collection('chatRooms')
+            .where('itemId', isEqualTo: request.itemId)
+            .where('finderId', isEqualTo: request.finderId)
+            .get();
+        
+        for (var doc in chatRooms.docs) {
+          await doc.reference.delete();
+        }
+        
         await _firestore.collection('notifications').add({
           'userId': request.finderId,
           'title': 'Request Rejected',
@@ -575,6 +693,11 @@ class FirebaseDatabaseService {
         
         _demoRequests.removeAt(index);
         
+        // Delete associated chat room
+        _demoChatRooms.removeWhere((room) =>
+            room.itemId == request.itemId &&
+            room.finderId == request.finderId);
+        
         // Refresh streams
         final finderKey = 'finder_requests_${request.finderId}';
         if (_demoControllers.containsKey(finderKey)) {
@@ -609,7 +732,20 @@ class FirebaseDatabaseService {
         return {'success': false, 'error': 'Only pending requests can be canceled'};
       }
       
+      // Delete the request
       await _firestore.collection('requests').doc(requestId).delete();
+      
+      // Delete associated chat room
+      final chatRooms = await _firestore
+          .collection('chatRooms')
+          .where('itemId', isEqualTo: request.itemId)
+          .where('finderId', isEqualTo: request.finderId)
+          .get();
+      
+      for (var doc in chatRooms.docs) {
+        await doc.reference.delete();
+      }
+      
       return {'success': true};
     } catch (e) {
       return {'success': false, 'error': e.toString()};
