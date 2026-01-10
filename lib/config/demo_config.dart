@@ -9,6 +9,7 @@
 /// 
 /// Set DEMO_MODE to true to run the app without Firebase
 /// This allows you to test the UI and flow without backend configuration
+library;
 
 class DemoConfig {
   /// Change this to FALSE after Firebase setup

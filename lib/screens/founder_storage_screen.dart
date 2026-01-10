@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../services/firebase_database_service.dart';
+import '../services/box_service.dart';
 import 'qr_scanner_screen.dart';
+import 'box_confirmation_screen.dart';
 import 'founder_requests_screen.dart';
 
 class FounderStorageScreen extends StatefulWidget {
@@ -21,7 +23,6 @@ class FounderStorageScreen extends StatefulWidget {
 }
 
 class _FounderStorageScreenState extends State<FounderStorageScreen> {
-  bool _isScanned = false;
   bool _isStoring = false;
 
   Future<void> _scanQRCode() async {
@@ -34,22 +35,55 @@ class _FounderStorageScreenState extends State<FounderStorageScreen> {
     if (scannedData != null && mounted) {
       // Validate that scanned QR matches the selected box
       if (scannedData == widget.boxId) {
-        setState(() {
-          _isScanned = true;
-        });
-        
-        // TODO: Send unlock command to ESP32
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('✅ Box unlocked! Please store your item.'),
-            backgroundColor: Colors.green,
-            duration: Duration(seconds: 3),
-          ),
-        );
+        // Update box status to UNLOCKED (OPEN) in database
+        final boxService = BoxService();
+        final unlocked =
+            await boxService.updateBoxLockStatus(widget.boxId, false);
+
+        if (unlocked) {
+          // Fetch box details for the confirmation screen
+          final box = await boxService.getBoxById(widget.boxId);
+
+          if (!mounted) return;
+
+          // Navigate to confirmation screen
+          final confirmed = await Navigator.of(context).push<bool>(
+            MaterialPageRoute(
+              builder: (_) => BoxConfirmationScreen(
+                boxId: widget.boxId,
+                boxName: box?.name ?? widget.boxId,
+                boxLocation: box?.location ?? widget.boxLocation,
+              ),
+            ),
+          );
+
+          if (!mounted) return;
+
+          // If confirmed, proceed with storage
+          if (confirmed == true) {
+            await _confirmStorage();
+          } else {
+            // If user went back without confirming, show a message
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('⚠️ Item not stored. Box may still be open.'),
+                backgroundColor: Colors.orange,
+              ),
+            );
+          }
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('❌ Failed to unlock box in database'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('❌ Wrong box! Expected ${widget.boxId} but scanned $scannedData'),
+            content: Text(
+                '❌ Wrong box! Expected ${widget.boxId} but scanned $scannedData'),
             backgroundColor: Colors.red,
             duration: const Duration(seconds: 3),
           ),
@@ -61,21 +95,22 @@ class _FounderStorageScreenState extends State<FounderStorageScreen> {
   Future<void> _confirmStorage() async {
     setState(() => _isStoring = true);
 
-    final dbService = Provider.of<FirebaseDatabaseService>(context, listen: false);
-    
+    final dbService =
+        Provider.of<FirebaseDatabaseService>(context, listen: false);
+
     // Update item status from 'pending_storage' to 'waiting'
     final result = await dbService.updateItemStatus(widget.itemId, 'waiting');
+
+    // Note: Box is already locked by the BoxConfirmationScreen
 
     setState(() => _isStoring = false);
 
     if (!mounted) return;
 
     if (result['success']) {
-      // TODO: Send lock command to ESP32
-      
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('✅ Item stored successfully! Box locked.'),
+          content: Text('✅ Item stored successfully!'),
           backgroundColor: Colors.green,
         ),
       );
@@ -111,34 +146,31 @@ class _FounderStorageScreenState extends State<FounderStorageScreen> {
             Container(
               padding: const EdgeInsets.all(24),
               decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: _isScanned
-                      ? [Colors.green.shade400, Colors.green.shade600]
-                      : [const Color(0xFFFBBF24), const Color(0xFFF59E0B)],
+                gradient: const LinearGradient(
+                  colors: [Color(0xFFFBBF24), Color(0xFFF59E0B)],
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
                 ),
                 borderRadius: BorderRadius.circular(20),
                 boxShadow: [
                   BoxShadow(
-                    color: (_isScanned ? Colors.green : const Color(0xFFFBBF24))
-                        .withOpacity(0.3),
+                    color: const Color(0xFFFBBF24).withOpacity(0.3),
                     blurRadius: 20,
                     offset: const Offset(0, 10),
                   ),
                 ],
               ),
-              child: Column(
+              child: const Column(
                 children: [
                   Icon(
-                    _isScanned ? Icons.lock_open : Icons.qr_code_scanner,
+                    Icons.qr_code_scanner,
                     size: 64,
                     color: Colors.white,
                   ),
-                  const SizedBox(height: 16),
+                  SizedBox(height: 16),
                   Text(
-                    _isScanned ? 'Box Unlocked!' : 'Scan QR Code to Unlock',
-                    style: const TextStyle(
+                    'Scan QR Code to Unlock',
+                    style: TextStyle(
                       fontSize: 22,
                       fontWeight: FontWeight.bold,
                       color: Colors.white,
@@ -217,104 +249,70 @@ class _FounderStorageScreenState extends State<FounderStorageScreen> {
             const SizedBox(height: 24),
 
             // Instructions
-            if (!_isScanned) ...[
-              Card(
-                color: Colors.blue[50],
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Icon(Icons.info_outline, color: Colors.blue[700]),
-                          const SizedBox(width: 12),
-                          const Text(
-                            'Instructions',
-                            style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 16,
-                            ),
+            Card(
+              color: Colors.blue[50],
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(Icons.info_outline, color: Colors.blue[700]),
+                        const SizedBox(width: 12),
+                        const Text(
+                          'Instructions',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 16,
                           ),
-                        ],
-                      ),
-                      const SizedBox(height: 12),
-                      _InstructionStep(number: '1', text: 'Go to the box location'),
-                      _InstructionStep(number: '2', text: 'Tap "Scan QR Code" below'),
-                      _InstructionStep(number: '3', text: 'Scan the QR code on the box'),
-                      _InstructionStep(number: '4', text: 'Box will unlock automatically'),
-                      _InstructionStep(number: '5', text: 'Put your item inside'),
-                      _InstructionStep(number: '6', text: 'Tap "Item Stored" to lock the box'),
-                    ],
-                  ),
-                ),
-              ),
-              const SizedBox(height: 24),
-
-              // Scan QR Button
-              FilledButton.icon(
-                onPressed: _scanQRCode,
-                style: FilledButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  backgroundColor: const Color(0xFF6366F1),
-                ),
-                icon: const Icon(Icons.qr_code_scanner),
-                label: const Text(
-                  'Scan QR Code',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-            ] else ...[
-              // Success message
-              Card(
-                color: Colors.green[50],
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Row(
-                    children: [
-                      Icon(Icons.check_circle, color: Colors.green[700], size: 32),
-                      const SizedBox(width: 12),
-                      const Expanded(
-                        child: Text(
-                          'Box is now unlocked! Please place your item inside and confirm below.',
-                          style: TextStyle(fontSize: 15),
                         ),
-                      ),
-                    ],
-                  ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    const _InstructionStep(
+                        number: '1', text: 'Go to the box location'),
+                    const _InstructionStep(
+                        number: '2', text: 'Tap "Scan QR Code" below'),
+                    const _InstructionStep(
+                        number: '3', text: 'Scan the QR code on the box'),
+                    const _InstructionStep(
+                        number: '4', text: 'Box will unlock automatically'),
+                    const _InstructionStep(
+                        number: '5', text: 'Put your item inside the box'),
+                    const _InstructionStep(
+                        number: '6', text: 'Confirm item placement'),
+                  ],
                 ),
               ),
-              const SizedBox(height: 24),
+            ),
+            const SizedBox(height: 24),
 
-              // Item Stored Button
-              FilledButton.icon(
-                onPressed: _isStoring ? null : _confirmStorage,
-                style: FilledButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  backgroundColor: Colors.green,
-                ),
-                icon: _isStoring
-                    ? const SizedBox(
-                        height: 20,
-                        width: 20,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: Colors.white,
-                        ),
-                      )
-                    : const Icon(Icons.lock),
-                label: Text(
-                  _isStoring ? 'Storing...' : 'Item Stored - Lock Box',
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                  ),
+            // Scan QR Button
+            FilledButton.icon(
+              onPressed: _isStoring ? null : _scanQRCode,
+              style: FilledButton.styleFrom(
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                backgroundColor: const Color(0xFF6366F1),
+              ),
+              icon: _isStoring
+                  ? const SizedBox(
+                      height: 20,
+                      width: 20,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.white,
+                      ),
+                    )
+                  : const Icon(Icons.qr_code_scanner),
+              label: Text(
+                _isStoring ? 'Processing...' : 'Scan QR Code',
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
                 ),
               ),
-            ],
+            ),
           ],
         ),
       ),

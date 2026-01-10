@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../services/firebase_database_service.dart';
+import '../services/box_service.dart';
 import '../models/request_model.dart';
 import '../models/item_model.dart';
 import 'qr_scanner_screen.dart';
@@ -126,14 +127,14 @@ class FinderStatusScreen extends StatelessWidget {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Row(
+                            const Row(
                               children: [
-                                const Icon(
+                                Icon(
                                   Icons.inventory_2,
                                   color: Color(0xFF6366F1),
                                 ),
-                                const SizedBox(width: 12),
-                                const Text(
+                                SizedBox(width: 12),
+                                Text(
                                   'Item Location',
                                   style: TextStyle(
                                     fontWeight: FontWeight.bold,
@@ -208,6 +209,19 @@ class FinderStatusScreen extends StatelessWidget {
                       if (scannedData != null && context.mounted) {
                         // Validate scanned QR matches the box ID
                         if (item != null && scannedData == item.boxId) {
+                          // Update box status to UNLOCKED in database
+                          final boxService = BoxService();
+                          final unlocked = await boxService.updateBoxLockStatus(item.boxId, false);
+                          
+                          if (!unlocked) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('⚠️ Box unlocked but database update failed'),
+                                backgroundColor: Colors.orange,
+                              ),
+                            );
+                          }
+                          
                           // Show success dialog with "I Got It" button
                           showDialog(
                             context: context,
@@ -230,6 +244,14 @@ class FinderStatusScreen extends StatelessWidget {
                                       color: Colors.green,
                                       fontWeight: FontWeight.bold,
                                       fontSize: 16,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 8),
+                                  const Text(
+                                    '📊 Database status: OPEN',
+                                    style: TextStyle(
+                                      color: Colors.blue,
+                                      fontSize: 13,
                                     ),
                                   ),
                                   const SizedBox(height: 16),
@@ -273,15 +295,19 @@ class FinderStatusScreen extends StatelessWidget {
                                       'claimed',
                                     );
                                     
+                                    // Lock the box in database
+                                    final boxService = BoxService();
+                                    final locked = await boxService.updateBoxLockStatus(item.boxId, true);
+                                    
                                     if (!context.mounted) return;
                                     
                                     Navigator.of(dialogContext).pop(); // Close dialog
                                     
-                                    if (updateResult['success']) {
+                                    if (updateResult['success'] && locked) {
                                       // Show success message
                                       ScaffoldMessenger.of(context).showSnackBar(
                                         const SnackBar(
-                                          content: Text('✅ Item successfully claimed!'),
+                                          content: Text('✅ Item claimed! Box locked in database.'),
                                           backgroundColor: Colors.green,
                                         ),
                                       );

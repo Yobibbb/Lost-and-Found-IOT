@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lost & Found - QR Code Generator</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        
+        h1 {
+            text-align: center;
+            color: white;
+            margin-bottom: 10px;
+            font-size: 2.5em;
+        }
+        
+        .subtitle {
+            text-align: center;
+            color: rgba(255, 255, 255, 0.9);
+            margin-bottom: 40px;
+            font-size: 1.1em;
+        }
+        
+        .qr-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+            gap: 30px;
+            margin-bottom: 40px;
+        }
+        
+        .qr-card {
+            background: white;
+            border-radius: 20px;
+            padding: 30px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+            text-align: center;
+        }
+        
+        .qr-card h2 {
+            color: #667eea;
+            margin-bottom: 10px;
+            font-size: 1.8em;
+        }
+        
+        .location {
+            color: #666;
+            margin-bottom: 20px;
+            font-size: 0.95em;
+            line-height: 1.5;
+        }
+        
+        .qr-code {
+            margin: 20px auto;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 15px;
+            display: inline-block;
+        }
+        
+        .box-id {
+            background: #667eea;
+            color: white;
+            padding: 10px 20px;
+            border-radius: 10px;
+            font-family: 'Courier New', monospace;
+            font-size: 1.2em;
+            font-weight: bold;
+            margin: 15px 0;
+            display: inline-block;
+        }
+        
+        .download-btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 12px 30px;
+            border-radius: 25px;
+            font-size: 1em;
+            font-weight: bold;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+            margin-top: 15px;
+        }
+        
+        .download-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+        
+        .download-btn:active {
+            transform: translateY(0);
+        }
+        
+        .custom-section {
+            background: white;
+            border-radius: 20px;
+            padding: 30px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+        }
+        
+        .custom-section h2 {
+            color: #667eea;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+        
+        .input-group {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+        
+        .input-group input {
+            flex: 1;
+            min-width: 200px;
+            padding: 12px 20px;
+            border: 2px solid #e0e0e0;
+            border-radius: 10px;
+            font-size: 1em;
+            transition: border-color 0.3s;
+        }
+        
+        .input-group input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        
+        .generate-btn {
+            background: #10b981;
+            color: white;
+            border: none;
+            padding: 12px 30px;
+            border-radius: 10px;
+            font-size: 1em;
+            font-weight: bold;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+        
+        .generate-btn:hover {
+            background: #059669;
+        }
+        
+        #customQrContainer {
+            margin-top: 20px;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 15px;
+            text-align: center;
+            display: none;
+        }
+        
+        .instructions {
+            background: white;
+            border-radius: 20px;
+            padding: 30px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+            margin-top: 30px;
+        }
+        
+        .instructions h3 {
+            color: #667eea;
+            margin-bottom: 15px;
+        }
+        
+        .instructions ol {
+            margin-left: 20px;
+            line-height: 2;
+            color: #333;
+        }
+        
+        .instructions li {
+            margin-bottom: 10px;
+        }
+        
+        .icon {
+            font-size: 3em;
+            margin-bottom: 15px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>📱 Lost & Found QR Code Generator</h1>
+        <p class="subtitle">Generate QR codes for your storage boxes</p>
+        
+        <!-- Pre-configured QR Codes -->
+        <div class="qr-grid">
+            <div class="qr-card">
+                <div class="icon">📦</div>
+                <h2>Box A1</h2>
+                <p class="location">📍 Building A, Floor 1<br>Near Main Entrance</p>
+                <div class="box-id">BOX_A1</div>
+                <div id="qr-box-a1" class="qr-code"></div>
+                <button class="download-btn" onclick="downloadQR('qr-box-a1', 'BOX_A1')">
+                    ⬇️ Download QR Code
+                </button>
+            </div>
+            
+            <div class="qr-card">
+                <div class="icon">📦</div>
+                <h2>Box A2</h2>
+                <p class="location">📍 Building A, Floor 2<br>Near Cafeteria</p>
+                <div class="box-id">BOX_A2</div>
+                <div id="qr-box-a2" class="qr-code"></div>
+                <button class="download-btn" onclick="downloadQR('qr-box-a2', 'BOX_A2')">
+                    ⬇️ Download QR Code
+                </button>
+            </div>
+        </div>
+        
+        <!-- Custom QR Code Generator -->
+        <div class="custom-section">
+            <h2>🔧 Create Custom Box QR Code</h2>
+            <div class="input-group">
+                <input type="text" id="customBoxId" placeholder="Enter Box ID (e.g., BOX_B1)" />
+                <button class="generate-btn" onclick="generateCustomQR()">Generate QR Code</button>
+            </div>
+            <div id="customQrContainer">
+                <div id="customQrCode" class="qr-code"></div>
+                <button class="download-btn" onclick="downloadCustomQR()">
+                    ⬇️ Download Custom QR Code
+                </button>
+            </div>
+        </div>
+        
+        <!-- Instructions -->
+        <div class="instructions">
+            <h3>📋 How to Use</h3>
+            <ol>
+                <li><strong>Download:</strong> Click the "Download QR Code" button under each box</li>
+                <li><strong>Print:</strong> Print the downloaded QR code images</li>
+                <li><strong>Attach:</strong> Place each QR code on the corresponding physical box</li>
+                <li><strong>Test:</strong> Use your app to scan and verify the QR codes work correctly</li>
+                <li><strong>Custom Boxes:</strong> Use the custom generator to create QR codes for additional boxes (BOX_B1, BOX_C1, etc.)</li>
+            </ol>
+        </div>
+    </div>
+
+    <script>
+        // Generate QR codes on page load
+        window.onload = function() {
+            // Generate BOX_A1
+            new QRCode(document.getElementById("qr-box-a1"), {
+                text: "BOX_A1",
+                width: 256,
+                height: 256,
+                colorDark: "#000000",
+                colorLight: "#ffffff",
+                correctLevel: QRCode.CorrectLevel.H
+            });
+            
+            // Generate BOX_A2
+            new QRCode(document.getElementById("qr-box-a2"), {
+                text: "BOX_A2",
+                width: 256,
+                height: 256,
+                colorDark: "#000000",
+                colorLight: "#ffffff",
+                correctLevel: QRCode.CorrectLevel.H
+            });
+        };
+        
+        // Download QR code as image
+        function downloadQR(elementId, boxId) {
+            const qrDiv = document.getElementById(elementId);
+            const canvas = qrDiv.querySelector('canvas');
+            
+            if (canvas) {
+                const url = canvas.toDataURL('image/png');
+                const link = document.createElement('a');
+                link.download = `${boxId}_QRCode.png`;
+                link.href = url;
+                link.click();
+            }
+        }
+        
+        // Generate custom QR code
+        let customQRInstance = null;
+        function generateCustomQR() {
+            const boxId = document.getElementById('customBoxId').value.trim().toUpperCase();
+            
+            if (!boxId) {
+                alert('Please enter a Box ID');
+                return;
+            }
+            
+            const container = document.getElementById('customQrContainer');
+            const qrDiv = document.getElementById('customQrCode');
+            
+            // Clear previous QR code
+            qrDiv.innerHTML = '';
+            
+            // Generate new QR code
+            customQRInstance = new QRCode(qrDiv, {
+                text: boxId,
+                width: 256,
+                height: 256,
+                colorDark: "#000000",
+                colorLight: "#ffffff",
+                correctLevel: QRCode.CorrectLevel.H
+            });
+            
+            // Show the container
+            container.style.display = 'block';
+        }
+        
+        // Download custom QR code
+        function downloadCustomQR() {
+            const boxId = document.getElementById('customBoxId').value.trim().toUpperCase();
+            const qrDiv = document.getElementById('customQrCode');
+            const canvas = qrDiv.querySelector('canvas');
+            
+            if (canvas) {
+                const url = canvas.toDataURL('image/png');
+                const link = document.createElement('a');
+                link.download = `${boxId}_QRCode.png`;
+                link.href = url;
+                link.click();
+            }
+        }
+    </script>
+</body>
+</html>

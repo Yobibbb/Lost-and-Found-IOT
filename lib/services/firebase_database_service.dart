@@ -647,7 +647,7 @@ class FirebaseDatabaseService {
           _demoControllers[founderKey]!.add(founderItems);
         }
         
-        final allItemsKey = 'all_items';
+        const allItemsKey = 'all_items';
         if (_demoControllers.containsKey(allItemsKey)) {
           final sortedItems = List<ItemModel>.from(_demoItems)
             ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
