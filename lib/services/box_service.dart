@@ -1,9 +1,15 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_database/firebase_database.dart';
 import '../models/box_model.dart';
 import '../config/demo_config.dart';
 
 class BoxService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final FirebaseDatabase _rtdb = FirebaseDatabase.instanceFor(
+    app: FirebaseFirestore.instance.app,
+    databaseURL:
+        'https://lostandfound-606de-default-rtdb.asia-southeast1.firebasedatabase.app',
+  );
 
   // Demo mode data
   static final List<BoxModel> _demoBoxes = [
@@ -57,7 +63,7 @@ class BoxService {
           .collection('boxes')
           .where('isAvailable', isEqualTo: true)
           .get();
-      
+
       return snapshot.docs
           .map((doc) => BoxModel.fromMap(doc.data(), doc.id))
           .toList();
@@ -105,11 +111,16 @@ class BoxService {
     }
 
     try {
+      // Update Firestore
       await _firestore.collection('boxes').doc(boxId).update({
         'isAvailable': false,
         'currentItemId': itemId,
         'lastUpdated': FieldValue.serverTimestamp(),
       });
+
+      // Sync to Realtime Database for Arduino
+      await _syncToRealtimeDB(boxId);
+
       return true;
     } catch (e) {
       print('❌ Error occupying box: $e');
@@ -134,11 +145,16 @@ class BoxService {
     }
 
     try {
+      // Update Firestore
       await _firestore.collection('boxes').doc(boxId).update({
         'isAvailable': true,
         'currentItemId': null,
         'lastUpdated': FieldValue.serverTimestamp(),
       });
+
+      // Sync to Realtime Database for Arduino
+      await _syncToRealtimeDB(boxId);
+
       return true;
     } catch (e) {
       print('❌ Error releasing box: $e');
@@ -162,10 +178,19 @@ class BoxService {
     }
 
     try {
+      // Update Firestore
       await _firestore.collection('boxes').doc(boxId).update({
         'isLocked': isLocked,
         'lastUpdated': FieldValue.serverTimestamp(),
       });
+
+      // Immediately sync to Realtime Database for Arduino
+      await _rtdb.ref('boxes/$boxId').update({
+        'isLocked': isLocked,
+        'lastUpdated': ServerValue.timestamp,
+      });
+
+      print('✅ Box $boxId lock status synced: isLocked=$isLocked');
       return true;
     } catch (e) {
       print('❌ Error updating box lock status: $e');
@@ -201,14 +226,22 @@ class BoxService {
 
     try {
       final boxes = [
-        {'id': 'BOX_A1', 'name': 'Box A1', 'location': 'Building A, Floor 1, Near Main Entrance'},
-        {'id': 'BOX_A2', 'name': 'Box A2', 'location': 'Building A, Floor 2, Near Cafeteria'},
+        {
+          'id': 'BOX_A1',
+          'name': 'Box A1',
+          'location': 'Building A, Floor 1, Near Main Entrance'
+        },
+        {
+          'id': 'BOX_A2',
+          'name': 'Box A2',
+          'location': 'Building A, Floor 2, Near Cafeteria'
+        },
       ];
 
       for (var box in boxes) {
         final docRef = _firestore.collection('boxes').doc(box['id']);
         final docSnapshot = await docRef.get();
-        
+
         if (!docSnapshot.exists) {
           await docRef.set({
             'name': box['name'],
@@ -221,11 +254,33 @@ class BoxService {
           });
           print('✅ Created box: ${box['id']}');
         }
+
+        // Sync to Realtime Database
+        await _rtdb.ref('boxes/${box['id']}').set({
+          'isLocked': true,
+          'lastUpdated': ServerValue.timestamp,
+        });
       }
-      
-      print('✅ Boxes initialization complete');
+
+      print('✅ Boxes initialization complete (Firestore + RTDB)');
     } catch (e) {
       print('❌ Error initializing boxes: $e');
+    }
+  }
+
+  // Helper method to sync box data to Realtime Database
+  Future<void> _syncToRealtimeDB(String boxId) async {
+    try {
+      final doc = await _firestore.collection('boxes').doc(boxId).get();
+      if (doc.exists) {
+        final data = doc.data()!;
+        await _rtdb.ref('boxes/$boxId').update({
+          'isLocked': data['isLocked'] ?? true,
+          'lastUpdated': ServerValue.timestamp,
+        });
+      }
+    } catch (e) {
+      print('⚠️ Warning: Could not sync to RTDB: $e');
     }
   }
 }
