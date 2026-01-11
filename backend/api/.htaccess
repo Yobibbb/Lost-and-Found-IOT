@@ -1,0 +1,46 @@
+# Enable URL rewriting
+RewriteEngine On
+
+# Set base directory
+RewriteBase /Lost-and-Found-IOT/backend/api/
+
+# Redirect all requests to index.php
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteRule ^(.*)$ index.php [QSA,L]
+
+# Deny access to sensitive files
+<FilesMatch "\.(htaccess|htpasswd|ini|log|sh|sql)$">
+    Order Allow,Deny
+    Deny from all
+</FilesMatch>
+
+# Disable directory browsing
+Options -Indexes
+
+# Enable CORS
+Header set Access-Control-Allow-Origin "*"
+Header set Access-Control-Allow-Methods "GET, POST, PUT, DELETE, OPTIONS"
+Header set Access-Control-Allow-Headers "Content-Type, Authorization, X-Requested-With"
+
+# Set default charset
+AddDefaultCharset UTF-8
+
+# Compress responses
+<IfModule mod_deflate.c>
+    AddOutputFilterByType DEFLATE application/json
+    AddOutputFilterByType DEFLATE text/html
+    AddOutputFilterByType DEFLATE text/plain
+</IfModule>
+
+# Cache control for API responses
+<IfModule mod_headers.c>
+    # Don't cache API responses by default
+    Header set Cache-Control "no-cache, no-store, must-revalidate"
+    Header set Pragma "no-cache"
+    Header set Expires 0
+</IfModule>
+
+# Error documents (optional)
+ErrorDocument 404 /Lost-and-Found-IOT/backend/api/index.php
+ErrorDocument 500 /Lost-and-Found-IOT/backend/api/index.php

@@ -9,11 +9,7 @@ class QRScannerScreen extends StatefulWidget {
 }
 
 class _QRScannerScreenState extends State<QRScannerScreen> {
-  MobileScannerController cameraController = MobileScannerController(
-    detectionSpeed: DetectionSpeed.noDuplicates,
-    facing: CameraFacing.back,
-    torchEnabled: false,
-  );
+  MobileScannerController cameraController = MobileScannerController();
   bool _isScanned = false;
 
   @override
@@ -32,9 +28,6 @@ class _QRScannerScreenState extends State<QRScannerScreen> {
     if (barcode.rawValue == null) return;
     
     setState(() => _isScanned = true);
-    
-    // Add haptic feedback
-    print('✅ QR Code detected: ${barcode.rawValue}');
     
     // Return the scanned QR code data
     Navigator.of(context).pop(barcode.rawValue);
