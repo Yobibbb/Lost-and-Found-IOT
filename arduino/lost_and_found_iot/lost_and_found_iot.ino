@@ -1,5 +1,6 @@
 /*
  * Lost & Found IoT System - Arduino Code
+ * Reads lock status from Firebase Realtime Database and controls servo
  * 
  * Hardware:
  * - Arduino Uno R3
@@ -8,15 +9,14 @@
  * 
  * Features:
  * - Connects to WiFi using AT commands
- * - Polls API every 3 seconds for commands
+ * - Reads directly from Firebase Realtime Database (SSL)
+ * - Polls Firebase every 3 seconds for lock status
  * - Executes unlock (180°) and lock (0°) commands
- * - Sends heartbeat every 30 seconds
  * - Detailed serial debugging
  * 
- * API Endpoints:
- * - GET /api/arduino/command?box_id=BOX_A1
- * - POST /api/arduino/clear?box_id=BOX_A1
- * - POST /api/arduino/ping?box_id=BOX_A1
+ * Firebase Path:
+ * - /boxes/BOX_A1/isLocked (true = locked, false = unlocked)
+ * - /boxes/BOX_A2/isLocked (for second box)
  */
 
 #include <SoftwareSerial.h>
@@ -26,87 +26,82 @@
 // CONFIGURATION - EDIT THESE VALUES
 // ============================================
 
-// WiFi Settings
-#define WIFI_SSID "Your_WiFi_Name"
-#define WIFI_PASS "Your_WiFi_Password"
+// WiFi Configuration
+#define WIFI_SSID "ZTE_2.4G_VFfJNJ"       // Your WiFi network name
+#define WIFI_PASSWORD "9MUkNPy4"          // Your WiFi password
 
-// API Settings
-#define API_HOST "192.168.1.100"  // Your computer IP or server IP (no http://)
-#define API_PORT 80
-#define API_PATH "/Lost-and-Found-IOT/backend/api/arduino"
-#define BOX_ID "BOX_A1"  // Change for each box: BOX_A1, BOX_A2, etc.
+// Firebase Realtime Database Configuration
+#define FIREBASE_HOST "lostandfound-606de-default-rtdb.asia-southeast1.firebasedatabase.app"
+#define BOX_ID "BOX_A1"                   // Change to BOX_A2 for second Arduino
 
-// Hardware Settings
+// Hardware Setup
 #define SERVO_PIN 9
-#define LOCK_ANGLE 0      // Servo angle for locked position
-#define UNLOCK_ANGLE 180  // Servo angle for unlocked position
+#define LOCKED_POSITION 0      // Servo angle when locked (adjust if needed)
+#define UNLOCKED_POSITION 180  // Servo angle when unlocked (adjust if needed)
 
 // Timing Settings
-#define POLL_INTERVAL 3000      // Poll API every 3 seconds
-#define PING_INTERVAL 30000     // Send heartbeat every 30 seconds
-#define WIFI_TIMEOUT 10000      // WiFi connection timeout
-#define HTTP_TIMEOUT 5000       // HTTP request timeout
+#define CHECK_INTERVAL 3000    // Check Firebase every 3 seconds
+#define WIFI_TIMEOUT 20000     // WiFi connection timeout
 
 // Serial Settings
-#define DEBUG_SERIAL Serial
-#define ESP_SERIAL espSerial
 #define DEBUG_BAUD 115200
-#define ESP_BAUD 9600
+#define ESP_BAUD 115200        // ESP8266 baud rate (115200 recommended)
 
 // ============================================
 // HARDWARE SETUP
 // ============================================
 
-SoftwareSerial espSerial(2, 3); // RX=2, TX=3 for ESP8266
+SoftwareSerial ESP8266(2, 3); // RX=D2, TX=D3 for ESP8266
 Servo lockServo;
 
 // ============================================
 // GLOBAL VARIABLES
 // ============================================
 
-unsigned long lastPollTime = 0;
-unsigned long lastPingTime = 0;
-bool wifiConnected = false;
-String currentCommand = "";
-unsigned long commandTimestamp = 0;
+bool lastLockState = true;     // Last known lock state (true = locked)
+bool firstRun = true;           // Flag for first run
+unsigned long lastCheckTime = 0;
+unsigned long lastWiFiCheck = 0;
+const unsigned long WIFI_CHECK_INTERVAL = 60000; // Check WiFi every 60 seconds
 
 // ============================================
 // SETUP
 // ============================================
 
 void setup() {
-  // Initialize serial communication
-  DEBUG_SERIAL.begin(DEBUG_BAUD);
-  ESP_SERIAL.begin(ESP_BAUD);
+  Serial.begin(DEBUG_BAUD);
+  ESP8266.begin(ESP_BAUD);
   
   // Wait for serial to initialize
   delay(1000);
   
-  DEBUG_SERIAL.println(F("================================="));
-  DEBUG_SERIAL.println(F("  Lost & Found IoT System"));
-  DEBUG_SERIAL.println(F("  Arduino Uno R3 + ESP8266"));
-  DEBUG_SERIAL.println(F("================================="));
-  DEBUG_SERIAL.print(F("Box ID: "));
-  DEBUG_SERIAL.println(BOX_ID);
-  DEBUG_SERIAL.println();
+  Serial.println(F("\n===================================="));
+  Serial.println(F("  Lost & Found IoT System"));
+  Serial.println(F("  Arduino Uno R3 + ESP8266"));
+  Serial.println(F("  Firebase Realtime Database"));
+  Serial.println(F("===================================="));
+  Serial.print(F("Box ID: "));
+  Serial.println(BOX_ID);
+  Serial.print(F("Firebase: "));
+  Serial.println(FIREBASE_HOST);
+  Serial.println(F("====================================\n"));
   
   // Initialize servo
   lockServo.attach(SERVO_PIN);
-  lockServo.write(LOCK_ANGLE); // Start in locked position
-  DEBUG_SERIAL.println(F("[SERVO] Initialized to LOCKED position"));
+  lockServo.write(LOCKED_POSITION);
+  Serial.println(F("✓ Servo initialized at LOCKED position"));
   delay(500);
   
   // Initialize ESP8266
-  DEBUG_SERIAL.println(F("[WIFI] Initializing ESP8266..."));
+  Serial.println(F("\n[ESP] Initializing ESP8266..."));
   initESP8266();
   
   // Connect to WiFi
   connectWiFi();
   
-  DEBUG_SERIAL.println();
-  DEBUG_SERIAL.println(F("[SYSTEM] Initialization complete!"));
-  DEBUG_SERIAL.println(F("[SYSTEM] Starting main loop..."));
-  DEBUG_SERIAL.println();
+  Serial.println(F("\n===================================="));
+  Serial.println(F("Listening for commands from Firebase"));
+  Serial.println(F("====================================\n"));
 }
 
 // ============================================
@@ -116,28 +111,40 @@ void setup() {
 void loop() {
   unsigned long currentTime = millis();
   
-  // Poll for commands every POLL_INTERVAL
-  if (currentTime - lastPollTime >= POLL_INTERVAL) {
-    lastPollTime = currentTime;
+  // Check Firebase for lock status at regular intervals
+  if (currentTime - lastCheckTime >= CHECK_INTERVAL) {
+    lastCheckTime = currentTime;
     
-    if (wifiConnected) {
-      pollForCommand();
+    bool isLocked = readLockStatusFromFirebase();
+    
+    // Process command if it changed or first run
+    if (firstRun || (isLocked != lastLockState)) {
+      Serial.println(F("\n-----------------------------------"));
+      Serial.print(F("📩 Lock status changed: "));
+      Serial.println(isLocked ? "LOCKED" : "UNLOCKED");
+      Serial.println(F("-----------------------------------"));
+      
+      if (isLocked) {
+        lockBox();
+      } else {
+        unlockBox();
+      }
+      
+      lastLockState = isLocked;
+      firstRun = false;
     } else {
-      DEBUG_SERIAL.println(F("[ERROR] WiFi not connected. Reconnecting..."));
-      connectWiFi();
+      Serial.print(F("Status unchanged: "));
+      Serial.println(isLocked ? "LOCKED" : "UNLOCKED");
     }
   }
   
-  // Send heartbeat ping every PING_INTERVAL
-  if (currentTime - lastPingTime >= PING_INTERVAL) {
-    lastPingTime = currentTime;
-    
-    if (wifiConnected) {
-      sendHeartbeat();
-    }
+  // Periodic WiFi check (optional)
+  if (currentTime - lastWiFiCheck >= WIFI_CHECK_INTERVAL) {
+    lastWiFiCheck = currentTime;
+    Serial.println(F("[WIFI] Periodic check..."));
+    // Could add reconnect logic here if needed
   }
   
-  // Small delay to prevent overwhelming the loop
   delay(100);
 }
 
@@ -146,262 +153,236 @@ void loop() {
 // ============================================
 
 void initESP8266() {
-  DEBUG_SERIAL.println(F("[ESP] Sending AT test command..."));
-  sendATCommand(F("AT"), 1000);
+  Serial.println(F("[ESP] Resetting ESP8266..."));
+  ESP8266.println(F("AT+RST"));
+  delay(3000);
+  clearESPBuffer();
   
-  DEBUG_SERIAL.println(F("[ESP] Setting station mode..."));
-  sendATCommand(F("AT+CWMODE=1"), 2000);
+  Serial.println(F("[ESP] Sending AT test command..."));
+  ESP8266.println(F("AT"));
+  delay(1000);
+  clearESPBuffer();
   
-  DEBUG_SERIAL.println(F("[ESP] Enabling multiple connections..."));
-  sendATCommand(F("AT+CIPMUX=1"), 2000);
+  Serial.println(F("[ESP] Setting station mode..."));
+  ESP8266.println(F("AT+CWMODE=1"));
+  delay(1000);
+  clearESPBuffer();
 }
 
 // ============================================
-// WIFI CONNECTION
+// CONNECT TO WIFI
 // ============================================
 
 void connectWiFi() {
-  DEBUG_SERIAL.print(F("[WIFI] Connecting to: "));
-  DEBUG_SERIAL.println(WIFI_SSID);
+  Serial.println(F("\n[WIFI] Connecting to WiFi..."));
+  Serial.print(F("SSID: "));
+  Serial.println(WIFI_SSID);
   
   // Build connection command
-  String cmd = F("AT+CWJAP=\"");
-  cmd += WIFI_SSID;
-  cmd += F("\",\"");
-  cmd += WIFI_PASS;
-  cmd += F("\"");
+  ESP8266.print(F("AT+CWJAP=\""));
+  ESP8266.print(WIFI_SSID);
+  ESP8266.print(F("\",\""));
+  ESP8266.print(WIFI_PASSWORD);
+  ESP8266.println(F("\""));
   
-  // Send command and wait for OK
-  ESP_SERIAL.println(cmd);
+  ESP8266.setTimeout(15000);
   
-  unsigned long startTime = millis();
-  String response = "";
+  // Wait for connection
+  unsigned long timeout = millis();
   bool connected = false;
+  String response = "";
   
-  while (millis() - startTime < WIFI_TIMEOUT) {
-    if (ESP_SERIAL.available()) {
-      char c = ESP_SERIAL.read();
+  while (millis() - timeout < WIFI_TIMEOUT) {
+    if (ESP8266.available()) {
+      char c = ESP8266.read();
       response += c;
-      DEBUG_SERIAL.write(c);
+      Serial.write(c);
       
-      if (response.indexOf("OK") != -1) {
+      if (response.indexOf("WIFI CONNECTED") > -1 || 
+          response.indexOf("WIFI GOT IP") > -1 ||
+          response.indexOf("OK") > -1) {
         connected = true;
         break;
       }
       
-      if (response.indexOf("FAIL") != -1) {
+      if (response.indexOf("FAIL") > -1) {
         break;
       }
     }
   }
   
-  wifiConnected = connected;
-  
   if (connected) {
-    DEBUG_SERIAL.println();
-    DEBUG_SERIAL.println(F("[WIFI] ✓ Connected successfully!"));
+    Serial.println(F("\n✓ WiFi Connected Successfully!\n"));
     
-    // Get IP address
-    sendATCommand(F("AT+CIFSR"), 2000);
+    // Set multiple connections mode
+    delay(2000);
+    ESP8266.println(F("AT+CIPMUX=1"));
+    delay(500);
+    clearESPBuffer();
+    
   } else {
-    DEBUG_SERIAL.println();
-    DEBUG_SERIAL.println(F("[WIFI] ✗ Connection failed!"));
-    DEBUG_SERIAL.println(F("[WIFI] Will retry in next cycle..."));
+    Serial.println(F("\n✗ WiFi Connection Failed!"));
+    Serial.println(F("Retrying in 5 seconds...\n"));
+    delay(5000);
+    connectWiFi(); // Retry
   }
 }
 
 // ============================================
-// POLL FOR COMMAND
+// READ LOCK STATUS FROM FIREBASE
 // ============================================
 
-void pollForCommand() {
-  DEBUG_SERIAL.println(F("[API] Polling for commands..."));
+bool readLockStatusFromFirebase() {
+  // Close any existing connection
+  ESP8266.println(F("AT+CIPCLOSE=0"));
+  delay(500);
+  clearESPBuffer();
   
-  // Build HTTP GET request
-  String url = String(API_PATH) + "/command?box_id=" + BOX_ID;
-  String response = httpGet(API_HOST, API_PORT, url);
+  // Connect to Firebase via SSL
+  Serial.println(F("[Firebase] Connecting to Firebase SSL..."));
   
-  if (response.length() > 0) {
-    DEBUG_SERIAL.println(F("[API] Response received:"));
-    DEBUG_SERIAL.println(response);
+  ESP8266.print(F("AT+CIPSTART=0,\"SSL\",\""));
+  ESP8266.print(FIREBASE_HOST);
+  ESP8266.println(F("\",443"));
+  
+  // Wait for connection
+  String connResponse = "";
+  unsigned long timeout = millis();
+  bool connected = false;
+  
+  while (millis() - timeout < 10000) {
+    while (ESP8266.available()) {
+      char c = ESP8266.read();
+      connResponse += c;
+    }
     
-    // Parse command from JSON (simple string search, no JSON library)
-    int commandPos = response.indexOf("\"command\":");
-    if (commandPos != -1) {
-      int startQuote = response.indexOf("\"", commandPos + 10);
-      int endQuote = response.indexOf("\"", startQuote + 1);
-      
-      if (startQuote != -1 && endQuote != -1) {
-        String command = response.substring(startQuote + 1, endQuote);
-        
-        if (command == "unlock") {
-          DEBUG_SERIAL.println(F("[COMMAND] ⚡ UNLOCK command received!"));
-          executeUnlock();
-          clearCommand();
-        } 
-        else if (command == "lock") {
-          DEBUG_SERIAL.println(F("[COMMAND] ⚡ LOCK command received!"));
-          executeLock();
-          clearCommand();
-        }
-        else if (command == "null") {
-          DEBUG_SERIAL.println(F("[COMMAND] No pending commands."));
-        }
-        else {
-          DEBUG_SERIAL.print(F("[COMMAND] Unknown command: "));
-          DEBUG_SERIAL.println(command);
-        }
+    if (connResponse.indexOf("CONNECT") > -1) {
+      Serial.println(F("✓ SSL Connected!"));
+      connected = true;
+      break;
+    }
+    
+    if (connResponse.indexOf("ERROR") > -1 || connResponse.indexOf("CLOSED") > -1) {
+      Serial.println(F("✗ SSL Connection Failed!"));
+      Serial.println(F("⚠ Check: 1) ESP8266 firmware supports SSL"));
+      Serial.println(F("         2) Firebase host is correct"));
+      return lastLockState; // Return last known state
+    }
+  }
+  
+  if (!connected) {
+    Serial.println(F("✗ Connection Timeout"));
+    return lastLockState; // Return last known state
+  }
+  
+  delay(1000);
+  
+  // Prepare HTTP GET request for isLocked field
+  String path = "/boxes/" + String(BOX_ID) + "/isLocked.json";
+  String request = "GET " + path + " HTTP/1.1\r\n";
+  request += "Host: " + String(FIREBASE_HOST) + "\r\n";
+  request += "Connection: close\r\n\r\n";
+  
+  // Send request
+  Serial.println(F("[Firebase] Sending HTTP request..."));
+  ESP8266.print(F("AT+CIPSEND=0,"));
+  ESP8266.println(request.length());
+  delay(1000);
+  
+  if (ESP8266.find(">")) {
+    ESP8266.print(request);
+    Serial.println(F("✓ Request sent"));
+    delay(2000);
+    
+    // Read response
+    String response = "";
+    timeout = millis();
+    
+    while (millis() - timeout < 5000) {
+      while (ESP8266.available()) {
+        response += (char)ESP8266.read();
       }
     }
-  } else {
-    DEBUG_SERIAL.println(F("[API] ✗ No response or error"));
-  }
-  
-  DEBUG_SERIAL.println();
-}
-
-// ============================================
-// EXECUTE COMMANDS
-// ============================================
-
-void executeUnlock() {
-  DEBUG_SERIAL.println(F("[SERVO] Unlocking... Moving to 180°"));
-  lockServo.write(UNLOCK_ANGLE);
-  delay(1000); // Wait for servo to reach position
-  DEBUG_SERIAL.println(F("[SERVO] ✓ Unlocked!"));
-}
-
-void executeLock() {
-  DEBUG_SERIAL.println(F("[SERVO] Locking... Moving to 0°"));
-  lockServo.write(LOCK_ANGLE);
-  delay(1000); // Wait for servo to reach position
-  DEBUG_SERIAL.println(F("[SERVO] ✓ Locked!"));
-}
-
-// ============================================
-// CLEAR COMMAND (AFTER EXECUTION)
-// ============================================
-
-void clearCommand() {
-  DEBUG_SERIAL.println(F("[API] Clearing command..."));
-  
-  String url = String(API_PATH) + "/clear?box_id=" + BOX_ID;
-  String response = httpPost(API_HOST, API_PORT, url, "");
-  
-  if (response.indexOf("success") != -1) {
-    DEBUG_SERIAL.println(F("[API] ✓ Command cleared successfully"));
-  } else {
-    DEBUG_SERIAL.println(F("[API] ✗ Failed to clear command"));
-  }
-}
-
-// ============================================
-// SEND HEARTBEAT
-// ============================================
-
-void sendHeartbeat() {
-  DEBUG_SERIAL.println(F("[PING] Sending heartbeat..."));
-  
-  String url = String(API_PATH) + "/ping?box_id=" + BOX_ID;
-  String response = httpPost(API_HOST, API_PORT, url, "");
-  
-  if (response.indexOf("success") != -1) {
-    DEBUG_SERIAL.println(F("[PING] ✓ Heartbeat sent"));
-  } else {
-    DEBUG_SERIAL.println(F("[PING] ✗ Heartbeat failed"));
-    wifiConnected = false; // Mark as disconnected to trigger reconnect
-  }
-}
-
-// ============================================
-// HTTP GET REQUEST
-// ============================================
-
-String httpGet(String host, int port, String url) {
-  return httpRequest(host, port, url, "GET", "");
-}
-
-// ============================================
-// HTTP POST REQUEST
-// ============================================
-
-String httpPost(String host, int port, String url, String body) {
-  return httpRequest(host, port, url, "POST", body);
-}
-
-// ============================================
-// HTTP REQUEST (USING AT COMMANDS)
-// ============================================
-
-String httpRequest(String host, int port, String url, String method, String body) {
-  // Start TCP connection
-  String cmd = "AT+CIPSTART=0,\"TCP\",\"" + host + "\"," + String(port);
-  ESP_SERIAL.println(cmd);
-  delay(2000);
-  
-  // Build HTTP request
-  String request = method + " " + url + " HTTP/1.1\r\n";
-  request += "Host: " + host + "\r\n";
-  request += "Connection: close\r\n";
-  
-  if (body.length() > 0) {
-    request += "Content-Type: application/json\r\n";
-    request += "Content-Length: " + String(body.length()) + "\r\n";
-  }
-  
-  request += "\r\n";
-  request += body;
-  
-  // Send request length
-  cmd = "AT+CIPSEND=0," + String(request.length());
-  ESP_SERIAL.println(cmd);
-  delay(500);
-  
-  // Send actual request
-  ESP_SERIAL.print(request);
-  
-  // Wait for response
-  unsigned long startTime = millis();
-  String response = "";
-  
-  while (millis() - startTime < HTTP_TIMEOUT) {
-    if (ESP_SERIAL.available()) {
-      char c = ESP_SERIAL.read();
-      response += c;
-    }
     
-    if (response.indexOf("+IPD") != -1 && response.indexOf("}") != -1) {
-      break; // Got complete JSON response
-    }
+    // Close connection
+    ESP8266.println(F("AT+CIPCLOSE=0"));
+    delay(500);
+    
+    // Debug: Print response
+    Serial.println(F("\n--- Firebase Response ---"));
+    Serial.println(response);
+    Serial.println(F("--- End Response ---\n"));
+    
+    // Parse isLocked from JSON response
+    bool isLocked = parseLockStatus(response);
+    return isLocked;
+    
+  } else {
+    Serial.println(F("✗ Failed to send request"));
+    ESP8266.println(F("AT+CIPCLOSE=0"));
+    delay(500);
+    return lastLockState; // Return last known state
   }
-  
-  // Close connection
-  ESP_SERIAL.println(F("AT+CIPCLOSE=0"));
-  delay(500);
-  
-  // Extract JSON from response
-  int jsonStart = response.indexOf("{");
-  if (jsonStart != -1) {
-    return response.substring(jsonStart);
-  }
-  
-  return "";
 }
 
 // ============================================
-// SEND AT COMMAND
+// PARSE LOCK STATUS FROM JSON RESPONSE
 // ============================================
 
-void sendATCommand(const __FlashStringHelper* cmd, int timeout) {
-  ESP_SERIAL.println(cmd);
+bool parseLockStatus(String response) {
+  // Look for "true" or "false" in response
   
-  unsigned long startTime = millis();
-  while (millis() - startTime < timeout) {
-    if (ESP_SERIAL.available()) {
-      DEBUG_SERIAL.write(ESP_SERIAL.read());
-    }
+  if (response.indexOf("true") > -1) {
+    return true;  // Locked
+  } 
+  else if (response.indexOf("false") > -1) {
+    return false; // Unlocked
   }
-  DEBUG_SERIAL.println();
+  else if (response.indexOf("null") > -1) {
+    return true;  // Default to locked if null
+  }
+  
+  return lastLockState; // Return last known state if parsing fails
+}
+
+// ============================================
+// UNLOCK BOX
+// ============================================
+
+void unlockBox() {
+  Serial.println(F("\n🔓 UNLOCKING BOX..."));
+  
+  lockServo.write(UNLOCKED_POSITION);
+  Serial.print(F("✓ Servo moved to "));
+  Serial.print(UNLOCKED_POSITION);
+  Serial.println(F("°"));
+  
+  Serial.println(F("✓ Box UNLOCKED!\n"));
+}
+
+// ============================================
+// LOCK BOX
+// ============================================
+
+void lockBox() {
+  Serial.println(F("\n🔒 LOCKING BOX..."));
+  
+  lockServo.write(LOCKED_POSITION);
+  Serial.print(F("✓ Servo moved to "));
+  Serial.print(LOCKED_POSITION);
+  Serial.println(F("°"));
+  
+  Serial.println(F("✓ Box LOCKED!\n"));
+}
+
+// ============================================
+// CLEAR ESP8266 BUFFER
+// ============================================
+
+void clearESPBuffer() {
+  while (ESP8266.available()) {
+    ESP8266.read();
+  }
 }
 
 // ============================================

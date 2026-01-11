@@ -14,10 +14,14 @@ dependencies:
   dio: ^5.4.0                      # HTTP client for API calls
   http: ^1.1.0                     # Alternative HTTP client
   
-  # Keep Firebase Messaging ONLY (for push notifications)
-  firebase_core: ^3.15.2           # Required by firebase_messaging
-  firebase_messaging: ^14.7.9      # Push notifications only
-  flutter_local_notifications: ^16.3.0  # Local notifications
+  # Firebase packages
+  firebase_core: ^2.32.0
+  firebase_auth: ^4.20.0
+  cloud_firestore: ^4.17.5
+  firebase_database: ^10.5.7
+  firebase_storage: ^11.7.7
+  firebase_messaging: ^14.7.9
+  flutter_local_notifications: ^17.2.3  # Updated for compatibility
   
   # State Management
   provider: ^6.1.2

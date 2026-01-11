@@ -135,13 +135,10 @@ CREATE TABLE messages (
 -- Sample Data for Testing
 -- ============================================
 
--- Insert sample boxes
+-- Insert sample boxes (matching Firebase configuration)
 INSERT INTO boxes (box_id, box_name, location, status, is_online) VALUES
 ('BOX_A1', 'Box A1', 'Building A, Floor 1, Near Main Entrance', 'available', FALSE),
-('BOX_A2', 'Box A2', 'Building A, Floor 2, Near Elevator', 'available', FALSE),
-('BOX_B1', 'Box B1', 'Building B, Floor 1, Near Cafeteria', 'available', FALSE),
-('BOX_B2', 'Box B2', 'Building B, Floor 2, Near Library', 'available', FALSE),
-('BOX_C1', 'Box C1', 'Building C, Floor 1, Main Lobby', 'available', FALSE);
+('BOX_A2', 'Box A2', 'Building A, Floor 2, Near Cafeteria', 'available', FALSE);
 
 -- Insert sample users (password is 'password123' for all - hashed with bcrypt)
 -- Note: In production, use proper password_hash() in PHP

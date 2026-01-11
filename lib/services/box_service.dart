@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_database/firebase_database.dart';
 import '../models/box_model.dart';
 import '../config/demo_config.dart';
+import 'database_sync_service.dart';
 
 class BoxService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
@@ -10,6 +11,7 @@ class BoxService {
     databaseURL:
         'https://lostandfound-606de-default-rtdb.asia-southeast1.firebasedatabase.app',
   );
+  final DatabaseSyncService _syncService = DatabaseSyncService();
 
   // Demo mode data
   static final List<BoxModel> _demoBoxes = [
@@ -121,6 +123,12 @@ class BoxService {
       // Sync to Realtime Database for Arduino
       await _syncToRealtimeDB(boxId);
 
+      // Sync to MySQL backend
+      final box = await getBoxById(boxId);
+      if (box != null) {
+        await _syncService.syncBoxToMySQL(box);
+      }
+
       return true;
     } catch (e) {
       print('❌ Error occupying box: $e');
@@ -154,6 +162,12 @@ class BoxService {
 
       // Sync to Realtime Database for Arduino
       await _syncToRealtimeDB(boxId);
+
+      // Sync to MySQL backend
+      final box = await getBoxById(boxId);
+      if (box != null) {
+        await _syncService.syncBoxToMySQL(box);
+      }
 
       return true;
     } catch (e) {
@@ -191,6 +205,13 @@ class BoxService {
       });
 
       print('✅ Box $boxId lock status synced: isLocked=$isLocked');
+      
+      // Sync to MySQL backend
+      final box = await getBoxById(boxId);
+      if (box != null) {
+        await _syncService.syncBoxToMySQL(box);
+      }
+      
       return true;
     } catch (e) {
       print('❌ Error updating box lock status: $e');
@@ -263,6 +284,10 @@ class BoxService {
       }
 
       print('✅ Boxes initialization complete (Firestore + RTDB)');
+      
+      // Sync all boxes to MySQL
+      await _syncService.syncAllBoxesToMySQL();
+      
     } catch (e) {
       print('❌ Error initializing boxes: $e');
     }
