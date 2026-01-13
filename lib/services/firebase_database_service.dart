@@ -106,6 +106,8 @@ class FirebaseDatabaseService {
         } else if (newStatus == 'claimed') {
           // Item claimed/retrieved - release the box
           await _boxService.releaseBox(item.boxId);
+          // Delete chat room and messages
+          await deleteChatRoomByItemId(itemId);
         }
         
         return {'success': true};
@@ -135,6 +137,8 @@ class FirebaseDatabaseService {
       } else if (newStatus == 'claimed') {
         // Item claimed/retrieved - release the box
         await _boxService.releaseBox(item.boxId);
+        // Delete chat room and messages
+        await deleteChatRoomByItemId(itemId);
       }
       
       return {'success': true};
@@ -906,6 +910,65 @@ class FirebaseDatabaseService {
   }
 
   // ============ CHAT ============
+
+  // Delete chat room and all messages by item ID
+  Future<void> deleteChatRoomByItemId(String itemId) async {
+    if (DemoConfig.demoMode) {
+      // Find and remove chat rooms for this item
+      _demoChatRooms.removeWhere((room) => room.itemId == itemId);
+      
+      // Find chat room IDs before removing messages
+      final chatRoomIds = _demoChatRooms
+          .where((room) => room.itemId == itemId)
+          .map((room) => room.id)
+          .toList();
+      
+      // Remove all messages from those chat rooms
+      _demoChatMessages.removeWhere((msg) => chatRoomIds.contains(msg.chatRoomId));
+      
+      print('🗑️ Deleted chat room and messages for item: $itemId');
+      return;
+    }
+
+    // Firebase mode
+    try {
+      // Find chat rooms for this item
+      final chatRoomsSnapshot = await _firestore
+          .collection('chatRooms')
+          .where('itemId', isEqualTo: itemId)
+          .get();
+      
+      if (chatRoomsSnapshot.docs.isEmpty) {
+        print('ℹ️ No chat rooms found for item: $itemId');
+        return;
+      }
+      
+      // Delete each chat room and its messages
+      for (var chatRoomDoc in chatRoomsSnapshot.docs) {
+        final chatRoomId = chatRoomDoc.id;
+        
+        // Delete all messages in this chat room
+        final messagesSnapshot = await _firestore
+            .collection('messages')
+            .where('chatRoomId', isEqualTo: chatRoomId)
+            .get();
+        
+        for (var messageDoc in messagesSnapshot.docs) {
+          await messageDoc.reference.delete();
+        }
+        
+        // Delete the chat room itself
+        await chatRoomDoc.reference.delete();
+        
+        print('🗑️ Deleted chat room: $chatRoomId with ${messagesSnapshot.docs.length} messages');
+      }
+      
+      print('✅ All chat rooms deleted for item: $itemId');
+    } catch (e) {
+      print('❌ Error deleting chat rooms: $e');
+      // Don't throw - we don't want to fail the claim operation if chat deletion fails
+    }
+  }
 
   // Create or get chat room
   Future<String> createOrGetChatRoom({
