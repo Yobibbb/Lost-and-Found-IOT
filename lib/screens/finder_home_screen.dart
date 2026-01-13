@@ -362,8 +362,12 @@ class _StatusBadge extends StatelessWidget {
     
     switch (status) {
       case 'approved':
-        color = Colors.green;
-        label = 'Approved';
+        color = Colors.blue;
+        label = 'Ready to Collect';
+        break;
+      case 'claimed':
+        color = Colors.grey;
+        label = 'Claimed';
         break;
       case 'rejected':
         color = Colors.red;

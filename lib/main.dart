@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'firebase_options.dart';
 import 'package:provider/provider.dart';
 import 'config/demo_config.dart';
+import 'config/supabase_config.dart';
 import 'services/auth_service.dart';
 import 'services/firebase_database_service.dart';
 import 'services/box_service.dart';
@@ -11,8 +13,16 @@ import 'screens/role_selection_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  
+  // Initialize Firebase
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
+  );
+  
+  // Initialize Supabase
+  await Supabase.initialize(
+    url: SupabaseConfig.supabaseUrl,
+    anonKey: SupabaseConfig.supabaseAnonKey,
   );
   
   // Note: Initialize boxes manually from admin panel after login

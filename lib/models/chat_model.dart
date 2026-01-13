@@ -6,6 +6,7 @@ class ChatMessageModel {
   final String senderId;
   final String senderName;
   final String message;
+  final String? imageUrl;
   final DateTime timestamp;
   final bool isRead;
 
@@ -15,6 +16,7 @@ class ChatMessageModel {
     required this.senderId,
     required this.senderName,
     required this.message,
+    this.imageUrl,
     required this.timestamp,
     required this.isRead,
   });
@@ -26,6 +28,7 @@ class ChatMessageModel {
       senderId: map['senderId'] ?? '',
       senderName: map['senderName'] ?? '',
       message: map['message'] ?? '',
+      imageUrl: map['imageUrl'],
       timestamp: _parseDateTime(map['timestamp']),
       isRead: map['isRead'] ?? false,
     );
@@ -44,6 +47,7 @@ class ChatMessageModel {
       'senderId': senderId,
       'senderName': senderName,
       'message': message,
+      'imageUrl': imageUrl,
       'timestamp': timestamp.toIso8601String(),
       'isRead': isRead,
     };
@@ -55,6 +59,7 @@ class ChatMessageModel {
     String? senderId,
     String? senderName,
     String? message,
+    String? imageUrl,
     DateTime? timestamp,
     bool? isRead,
   }) {
@@ -64,6 +69,7 @@ class ChatMessageModel {
       senderId: senderId ?? this.senderId,
       senderName: senderName ?? this.senderName,
       message: message ?? this.message,
+      imageUrl: imageUrl ?? this.imageUrl,
       timestamp: timestamp ?? this.timestamp,
       isRead: isRead ?? this.isRead,
     );

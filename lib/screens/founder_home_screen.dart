@@ -230,7 +230,7 @@ class _ItemCard extends StatelessWidget {
         ],
       ),
       child: InkWell(
-        onTap: () {
+        onTap: item.status == 'claimed' ? null : () {
           // If item is still pending storage, go back to storage screen
           if (item.status == 'pending_storage') {
             Navigator.of(context).push(

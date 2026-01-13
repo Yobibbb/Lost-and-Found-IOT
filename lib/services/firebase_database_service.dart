@@ -1,5 +1,7 @@
 import 'dart:async';
+import 'dart:typed_data';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:uuid/uuid.dart';
 import '../config/demo_config.dart';
 import '../config/mock_data.dart';
@@ -13,6 +15,7 @@ import 'box_service.dart';
 class FirebaseDatabaseService {
   final AuthService _authService;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final SupabaseClient _supabase = Supabase.instance.client;
   final BoxService _boxService = BoxService();
   
   // Demo mode state (for backward compatibility)
@@ -1244,6 +1247,139 @@ class FirebaseDatabaseService {
       });
       
       return {'success': true, 'messageId': messageRef.id};
+    } catch (e) {
+      return {'success': false, 'error': e.toString()};
+    }
+  }
+
+  // Send image message
+  Future<Map<String, dynamic>> sendImageMessage({
+    required String chatRoomId,
+    required Uint8List imageBytes,
+    required String fileName,
+  }) async {
+    if (DemoConfig.demoMode) {
+      // In demo mode, we can't actually upload files, so just send a placeholder
+      await MockData.mockDelay();
+      
+      final user = _authService.currentUser!;
+      final chatMessage = ChatMessageModel(
+        id: const Uuid().v4(),
+        chatRoomId: chatRoomId,
+        senderId: user.uid,
+        senderName: user.displayName ?? 'User',
+        message: '',
+        imageUrl: 'https://via.placeholder.com/400x300?text=Image+(Demo+Mode)',
+        timestamp: DateTime.now(),
+        isRead: false,
+      );
+      
+      _demoChatMessages.add(chatMessage);
+      
+      final roomIndex = _demoChatRooms.indexWhere((r) => r.id == chatRoomId);
+      if (roomIndex != -1) {
+        final room = _demoChatRooms[roomIndex];
+        _demoChatRooms[roomIndex] = room.copyWith(
+          lastMessage: '📷 Photo',
+          lastMessageAt: DateTime.now(),
+        );
+        
+        final founderKey = 'chat_rooms_${room.founderId}';
+        final finderKey = 'chat_rooms_${room.finderId}';
+        
+        for (final key in [founderKey, finderKey]) {
+          if (_demoControllers.containsKey(key)) {
+            final userId = key.split('_').last;
+            final chatRooms = _demoChatRooms
+                .where((r) => r.founderId == userId || r.finderId == userId)
+                .toList()
+                ..sort((a, b) => (b.lastMessageAt ?? b.createdAt)
+                    .compareTo(a.lastMessageAt ?? a.createdAt));
+            _demoControllers[key]!.add(chatRooms);
+          }
+        }
+        
+        final otherUserId = user.uid == room.founderId ? room.finderId : room.founderId;
+        await _createNotification(
+          userId: otherUserId,
+          title: 'New message',
+          message: '${user.displayName} sent a photo',
+          type: 'new_message',
+          relatedId: chatRoomId,
+        );
+      }
+      
+      final key = 'chat_messages_$chatRoomId';
+      if (_demoControllers.containsKey(key)) {
+        final messages = _demoChatMessages
+            .where((m) => m.chatRoomId == chatRoomId)
+            .toList()
+            ..sort((a, b) => a.timestamp.compareTo(b.timestamp));
+        _demoControllers[key]!.add(messages);
+      }
+      
+      return {'success': true, 'messageId': chatMessage.id};
+    }
+    
+    // Firebase mode
+    try {
+      final user = _authService.currentUser!;
+      
+      // Upload image to Supabase Storage
+      final String imagePath = 'chat_images/$chatRoomId/${DateTime.now().millisecondsSinceEpoch}_$fileName';
+      
+      final storageResponse = await _supabase.storage
+          .from('chat-images')
+          .uploadBinary(
+            imagePath,
+            imageBytes,
+            fileOptions: const FileOptions(
+              contentType: 'image/jpeg',
+              upsert: false,
+            ),
+          );
+      
+      // Get public URL
+      final String imageUrl = _supabase.storage
+          .from('chat-images')
+          .getPublicUrl(imagePath);
+      
+      // Create message with image URL
+      final messageRef = _firestore.collection('messages').doc();
+      
+      await messageRef.set({
+        'chatRoomId': chatRoomId,
+        'senderId': user.uid,
+        'senderName': user.displayName ?? 'User',
+        'message': '',
+        'imageUrl': imageUrl,
+        'timestamp': FieldValue.serverTimestamp(),
+        'isRead': false,
+      });
+      
+      // Update chat room's last message
+      await _firestore.collection('chatRooms').doc(chatRoomId).update({
+        'lastMessage': '📷 Photo',
+        'lastMessageAt': FieldValue.serverTimestamp(),
+      });
+      
+      // Get chat room for notification
+      final roomDoc = await _firestore.collection('chatRooms').doc(chatRoomId).get();
+      final room = ChatRoomModel.fromMap(roomDoc.data()!, roomDoc.id);
+      
+      // Create notification for the other user
+      final otherUserId = user.uid == room.founderId ? room.finderId : room.founderId;
+      await _firestore.collection('notifications').add({
+        'userId': otherUserId,
+        'title': 'New message',
+        'message': '${user.displayName} sent a photo',
+        'type': 'new_message',
+        'relatedId': chatRoomId,
+        'isRead': false,
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+      
+      return {'success': true, 'messageId': messageRef.id, 'imageUrl': imageUrl};
     } catch (e) {
       return {'success': false, 'error': e.toString()};
     }

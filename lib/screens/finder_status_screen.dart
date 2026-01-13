@@ -289,9 +289,27 @@ class FinderStatusScreen extends StatelessWidget {
                               actions: [
                                 ElevatedButton.icon(
                                   onPressed: () async {
+                                    // Disable button during processing
+                                    Navigator.of(dialogContext).pop(); // Close dialog first
+                                    
+                                    // Show loading indicator
+                                    showDialog(
+                                      context: context,
+                                      barrierDismissible: false,
+                                      builder: (loadingContext) => const Center(
+                                        child: CircularProgressIndicator(),
+                                      ),
+                                    );
+                                    
                                     // Update item status to 'claimed'
                                     final updateResult = await dbService.updateItemStatus(
                                       item.id,
+                                      'claimed',
+                                    );
+                                    
+                                    // Update request status to 'claimed'
+                                    final requestUpdate = await dbService.updateRequestStatus(
+                                      request.id,
                                       'claimed',
                                     );
                                     
@@ -301,23 +319,24 @@ class FinderStatusScreen extends StatelessWidget {
                                     
                                     if (!context.mounted) return;
                                     
-                                    Navigator.of(dialogContext).pop(); // Close dialog
+                                    // Close loading indicator
+                                    Navigator.of(context).pop();
                                     
-                                    if (updateResult['success'] && locked) {
+                                    if (updateResult['success'] && requestUpdate['success'] && locked) {
                                       // Show success message
                                       ScaffoldMessenger.of(context).showSnackBar(
                                         const SnackBar(
-                                          content: Text('✅ Item claimed! Box locked in database.'),
+                                          content: Text('✅ Item claimed successfully! Status updated.'),
                                           backgroundColor: Colors.green,
+                                          duration: Duration(seconds: 2),
                                         ),
                                       );
                                       
-                                      // Navigate back to home
-                                      Navigator.of(context).popUntil((route) => route.isFirst);
+                                      // The StreamBuilder will automatically update to show claimed status
                                     } else {
                                       ScaffoldMessenger.of(context).showSnackBar(
                                         SnackBar(
-                                          content: Text(updateResult['error'] ?? 'Failed to claim item'),
+                                          content: Text(updateResult['error'] ?? requestUpdate['error'] ?? 'Failed to claim item'),
                                           backgroundColor: Colors.red,
                                         ),
                                       );
@@ -432,6 +451,60 @@ class FinderStatusScreen extends StatelessWidget {
                     ),
                   ),
                 ],
+                
+                if (request.status == 'claimed') ...[
+                  Card(
+                    color: Colors.green[50],
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Row(
+                        children: [
+                          Icon(Icons.check_circle, color: Colors.green[700]),
+                          const SizedBox(width: 12),
+                          const Expanded(
+                            child: Text(
+                              'Item claimed successfully! This request is now complete.',
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Container(
+                    padding: const EdgeInsets.all(24),
+                    decoration: BoxDecoration(
+                      color: Colors.grey[100],
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Column(
+                      children: [
+                        Icon(Icons.done_all, size: 64, color: Colors.green[600]),
+                        const SizedBox(height: 12),
+                        Text(
+                          'DONE',
+                          style: TextStyle(
+                            fontSize: 24,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.green[700],
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'You have successfully claimed your item.',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            fontSize: 14,
+                            color: Colors.grey[600],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
               ],
             ),
           );
@@ -448,6 +521,8 @@ class FinderStatusScreen extends StatelessWidget {
         return 'Ready to Collect!';
       case 'rejected':
         return 'Request Rejected';
+      case 'claimed':
+        return 'Item Claimed';
       default:
         return 'Request Pending';
     }
@@ -459,6 +534,8 @@ class FinderStatusScreen extends StatelessWidget {
         return 'Your item is ready to collect';
       case 'rejected':
         return 'The founder has rejected your request';
+      case 'claimed':
+        return 'You have successfully claimed this item';
       default:
         return 'Waiting for founder to respond';
     }
@@ -483,6 +560,10 @@ class _StatusIcon extends StatelessWidget {
       case 'rejected':
         icon = Icons.cancel;
         color = Colors.red;
+        break;
+      case 'claimed':
+        icon = Icons.check_circle;
+        color = Colors.green;
         break;
       default:
         icon = Icons.hourglass_empty;
