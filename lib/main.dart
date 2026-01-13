@@ -15,11 +15,8 @@ void main() async {
     options: DefaultFirebaseOptions.currentPlatform,
   );
   
-  // Initialize boxes in Firebase (only runs once if boxes don't exist)
-  if (!DemoConfig.demoMode) {
-    final boxService = BoxService();
-    await boxService.initializeBoxes();
-  }
+  // Note: Initialize boxes manually from admin panel after login
+  // Call BoxService().initializeBoxes() from an authenticated admin screen
   
   runApp(const MyApp());
 }
